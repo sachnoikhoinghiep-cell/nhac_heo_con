@@ -30,11 +30,12 @@ st.markdown("---")
 # Auth gate — Google Sign-In + Firebase
 # ---------------------------------------------------------------------------
 PLANS = {
-    "Ngày":  {"price": "0.99",  "desc": "Sử dụng trong 24h"},
-    "Tuần":  {"price": "4.99",  "desc": "Tiết kiệm 30%"},
-    "Tháng": {"price": "14.99", "desc": "Phổ biến nhất"},
-    "Năm":   {"price": "99.99", "desc": "Gói chuyên nghiệp (VIP)"},
+    "Ngày":  {"price": "0.99",  "desc": "Sử dụng trong 24h",      "plan_id": "P-48U172572M537580PNICAPDY"},
+    "Tuần":  {"price": "4.99",  "desc": "Tiết kiệm 30%",           "plan_id": "P-12862804M08177324NICAPSI"},
+    "Tháng": {"price": "14.99", "desc": "Phổ biến nhất",           "plan_id": "P-5AV04190G6017082ENICAOVA"},
+    "Năm":   {"price": "99.99", "desc": "Gói chuyên nghiệp (VIP)", "plan_id": "P-055284903H354632FNICAN7I"},
 }
+PLAN_ID_TO_NAME = {v["plan_id"]: k for k, v in PLANS.items()}
 
 def _paypal_client_id() -> str:
     try:    return st.secrets["PAYPAL_CLIENT_ID"]
@@ -73,30 +74,30 @@ if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
     sign_out()
     st.stop()
 
-# Xử lý callback PayPal (phải trước payment gate)
-_pp_token    = st.query_params.get("token")
-_pp_payer_id = st.query_params.get("PayerID")
-if _pp_token and _pp_payer_id:
+# Xử lý callback PayPal subscription (phải trước payment gate)
+_pp_sub_id = st.query_params.get("subscription_id")
+_pp_ba     = st.query_params.get("ba_token")
+if _pp_sub_id:
     st.query_params.clear()
-    with st.spinner("Đang xác nhận thanh toán PayPal…"):
+    with st.spinner("Đang xác nhận đăng ký PayPal…"):
         try:
-            from paypal import capture_order as _pp_capture
-            _pp_result = _pp_capture(_paypal_client_id(), _paypal_secret(), _pp_token)
-            if _pp_result.get("status") == "COMPLETED":
-                _plan = _pp_result["purchase_units"][0].get("custom_id", "Tháng")
+            from paypal import get_subscription as _pp_get_sub
+            _sub = _pp_get_sub(_paypal_client_id(), _paypal_secret(), _pp_sub_id)
+            if _sub.get("status") == "ACTIVE":
+                _plan = PLAN_ID_TO_NAME.get(_sub.get("plan_id", ""), "Tháng")
                 activate_plan(_user["uid"], _plan)
                 st.session_state.user["is_paid"] = True
                 st.session_state.user["plan"]    = _plan
                 st.session_state.paypal_approval_url = None
-                st.success(f"Thanh toán thành công! Gói **{_plan}** đã được kích hoạt.")
+                st.success(f"Đăng ký thành công! Gói **{_plan}** đã được kích hoạt.")
                 st.rerun()
             else:
-                st.error(f"PayPal: đơn hàng chưa hoàn tất (status: {_pp_result.get('status')})")
+                st.error(f"PayPal: subscription chưa kích hoạt (status: {_sub.get('status')})")
         except Exception as _e:
             st.error(f"Lỗi xác nhận PayPal: {_e}")
-elif _pp_token and not _pp_payer_id:
+elif st.query_params.get("ba_token") and not _pp_sub_id:
     st.query_params.clear()
-    st.warning("Bạn đã hủy thanh toán PayPal.")
+    st.warning("Bạn đã hủy đăng ký PayPal.")
     st.session_state.paypal_approval_url = None
 
 # Chưa thanh toán → hiển thị trang nâng cấp
@@ -114,32 +115,32 @@ if not _user["is_paid"]:
         st.session_state.paypal_selected_plan = selected_plan
 
     if st.session_state.paypal_approval_url:
-        st.info(f"Đã tạo đơn hàng — Gói **{selected_plan}** — ${plan_info['price']} USD")
+        st.info(f"Đã tạo đơn đăng ký — Gói **{selected_plan}** — ${plan_info['price']} USD/kỳ")
         st.link_button(
-            "💳 Tiếp tục thanh toán trên PayPal",
+            "💳 Tiếp tục đăng ký trên PayPal",
             st.session_state.paypal_approval_url,
             type="primary",
             use_container_width=True,
         )
-        if st.button("🔄 Tạo lại đơn hàng mới", use_container_width=True):
+        if st.button("🔄 Tạo lại đơn mới", use_container_width=True):
             st.session_state.paypal_approval_url = None
             st.rerun()
     else:
-        if st.button("💳 Thanh toán qua PayPal", type="primary", use_container_width=True):
-            with st.spinner("Đang tạo đơn hàng PayPal…"):
+        if st.button("💳 Đăng ký qua PayPal", type="primary", use_container_width=True):
+            with st.spinner("Đang tạo đơn đăng ký PayPal…"):
                 try:
-                    from paypal import create_order as _pp_create
+                    from paypal import create_subscription as _pp_create_sub
                     _app_u = _app_url()
-                    _, _approval = _pp_create(
+                    _, _approval = _pp_create_sub(
                         _paypal_client_id(), _paypal_secret(),
-                        plan_info["price"], selected_plan,
+                        plan_info["plan_id"],
                         _app_u, _app_u,
                     )
                     st.session_state.paypal_approval_url  = _approval
                     st.session_state.paypal_selected_plan = selected_plan
                     st.rerun()
                 except Exception as _e:
-                    st.error(f"Lỗi tạo đơn hàng PayPal: {_e}")
+                    st.error(f"Lỗi tạo đơn đăng ký PayPal: {_e}")
 
     st.warning("Vui lòng hoàn tất thanh toán để sử dụng tính năng tạo nhạc AI.")
     st.stop()
