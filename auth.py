@@ -1,5 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
+import urllib.parse
+import os
 from firebase_admin import auth, firestore as fs
 from firebase_config import init_firebase
 from datetime import datetime, timezone, timedelta
@@ -13,7 +16,89 @@ PLAN_DURATION = {
 
 # Firebase REST API key (public — dùng cho client-side auth)
 FIREBASE_API_KEY = "AIzaSyBl3BYwj_E3v4ppfFUHXY1WpWx7r_6H5bA"
-FIREBASE_REST = "https://identitytoolkit.googleapis.com/v1/accounts"
+FIREBASE_REST    = "https://identitytoolkit.googleapis.com/v1/accounts"
+
+def _google_client_id() -> str:
+    """Đọc Google OAuth Web Client ID từ secrets hoặc env."""
+    try:
+        return st.secrets["GOOGLE_CLIENT_ID"]
+    except Exception:
+        return os.environ.get("GOOGLE_CLIENT_ID", "")
+
+def _redirect_uri() -> str:
+    """URL callback sau khi Google xác thực — phải khớp với cấu hình OAuth."""
+    try:
+        return st.secrets["REDIRECT_URI"]
+    except Exception:
+        return os.environ.get("REDIRECT_URI", "http://localhost:8501")
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth 2.0 — Implicit flow (redirect window.top, bypass iframe sandbox)
+# ---------------------------------------------------------------------------
+def google_oauth_redirect():
+    """Redirect toàn bộ trình duyệt (window.top) sang Google OAuth — không dùng iframe."""
+    client_id    = _google_client_id()
+    redirect_uri = _redirect_uri()
+    if not client_id:
+        st.error("Chưa cấu hình GOOGLE_CLIENT_ID trong secrets.")
+        return
+
+    auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth"
+        f"?client_id={urllib.parse.quote(client_id)}"
+        f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
+        "&response_type=token"
+        "&scope=openid%20email%20profile"
+        "&prompt=select_account"
+    )
+    # Dùng component height=0 để redirect window.top (không phải iframe)
+    components.html(
+        f"<script>window.top.location.href = {repr(auth_url)};</script>",
+        height=0,
+    )
+
+
+def handle_google_hash_fragment():
+    """
+    Đọc #access_token từ URL hash (Google trả về sau OAuth) và chuyển sang query param.
+    Phải render trên mỗi lần load trang để bắt được callback.
+    """
+    components.html("""
+    <script>
+    (function() {
+        const hash = window.parent.location.hash;
+        if (!hash || !hash.includes('access_token')) return;
+        const params = new URLSearchParams(hash.slice(1));
+        const token  = params.get('access_token');
+        if (!token) return;
+        // Xóa hash, thêm token vào query string để Python đọc được
+        const url = new URL(window.parent.location.href);
+        url.hash = '';
+        url.searchParams.set('google_access_token', token);
+        window.parent.location.replace(url.toString());
+    })();
+    </script>
+    """, height=0)
+
+
+def firebase_signin_with_google(access_token: str) -> str:
+    """Đổi Google access token lấy Firebase ID token qua signInWithIdp."""
+    redirect_uri = _redirect_uri()
+    resp = requests.post(
+        f"{FIREBASE_REST}:signInWithIdp?key={FIREBASE_API_KEY}",
+        json={
+            "postBody":             f"access_token={access_token}&providerId=google.com",
+            "requestUri":           redirect_uri,
+            "returnIdpCredential":  True,
+            "returnSecureToken":    True,
+        },
+        timeout=10,
+    )
+    data = resp.json()
+    if "error" in data:
+        raise ValueError(data["error"]["message"])
+    return data["idToken"]
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +161,48 @@ def firebase_reset_password(email: str):
 def show_auth_ui():
     """Hiển thị form đăng nhập / đăng ký — không dùng iframe, không lỗi môi trường."""
     st.markdown("### 👤 Đăng nhập để tiếp tục")
+
+    # ── Bắt callback Google OAuth (access_token trong URL hash → query param) ──
+    handle_google_hash_fragment()
+    g_token = st.query_params.get("google_access_token")
+    if g_token:
+        st.query_params.clear()
+        with st.spinner("Đang xác thực Google…"):
+            try:
+                id_token = firebase_signin_with_google(g_token)
+                user     = verify_and_load_user(id_token)
+                if user:
+                    st.session_state.user = user
+                    st.rerun()
+                else:
+                    st.error("Không thể xác thực. Thử lại.")
+            except Exception as e:
+                st.error(f"Lỗi Google Sign-In: {e}")
+
+    # ── Nút Google Sign-In ──────────────────────────────────────────────────
+    st.markdown(
+        """
+        <style>
+        .google-btn {
+            display:flex; align-items:center; justify-content:center; gap:10px;
+            width:100%; padding:10px 0; background:#fff;
+            border:1.5px solid #dadce0; border-radius:8px;
+            font-size:15px; font-weight:600; color:#3c4043;
+            cursor:pointer; text-decoration:none;
+            box-shadow:0 1px 3px rgba(0,0,0,.12);
+        }
+        .google-btn:hover { background:#f8f9fa; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    if _google_client_id():
+        if st.button("🔵  Đăng nhập bằng Google", use_container_width=True):
+            google_oauth_redirect()
+    else:
+        st.info("💡 Thêm `GOOGLE_CLIENT_ID` vào Streamlit secrets để bật Google Sign-In.")
+
+    st.divider()
 
     tab_login, tab_register = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký"])
 
