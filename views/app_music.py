@@ -49,9 +49,28 @@ for _k, _v in {
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
-# Chưa đăng nhập → hiển thị form login/register
+# Chưa đăng nhập → trang yêu cầu đăng nhập
 if not st.session_state.user:
-    show_auth_ui()
+    st.markdown("""
+    <div style="text-align:center; padding: 3rem 1rem 1rem;">
+        <div style="font-size:3.5rem;">🎵</div>
+        <h2>Đăng nhập để tạo nhạc</h2>
+        <p style="color:rgba(255,255,255,0.55); max-width:480px; margin:0 auto 2rem;">
+            Các trang <b>Trang chủ</b>, <b>Giới thiệu</b>, <b>Hướng dẫn</b>
+            và <b>Chính sách</b> xem tự do — không cần đăng nhập.<br><br>
+            Để <b>tạo nhạc AI</b>, cần đăng nhập và chọn gói dịch vụ.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_l, col_m, col_r = st.columns([1, 1.5, 1])
+    with col_m:
+        show_auth_ui()
+        st.divider()
+        st.page_link("views/home.py", label="💰 Xem bảng giá & gói dịch vụ",
+                     use_container_width=True)
+        st.page_link("views/guide.py", label="📋 Xem hướng dẫn sử dụng",
+                     use_container_width=True)
     st.stop()
 
 # Đã đăng nhập
@@ -66,10 +85,18 @@ if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
     sign_out()
     st.stop()
 
-# Chưa thanh toán → hiển thị trang nâng cấp
+# Chưa thanh toán → trang chọn gói
 if not _user["is_paid"]:
-    st.header("🎟️ Nâng cấp tài khoản để tạo nhạc")
-    st.markdown(f"Xin chào **{_user['name']}**! Chọn gói dịch vụ phù hợp để bắt đầu.")
+    st.markdown(f"""
+    <div style="text-align:center; padding: 2rem 1rem 1rem;">
+        <div style="font-size:3rem;">🎟️</div>
+        <h2>Chọn gói để bắt đầu tạo nhạc</h2>
+        <p style="color:rgba(255,255,255,0.55);">
+            Xin chào <b>{_user['name']}</b>! Bạn đã đăng nhập thành công.<br>
+            Chọn gói dịch vụ phù hợp để mở khoá toàn bộ tính năng AI Music Producer.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     selected_plan = st.selectbox("Chọn gói dịch vụ:", list(PLANS.keys()), key="selected_plan_key")
     plan_info     = PLANS[selected_plan]
