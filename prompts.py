@@ -60,6 +60,16 @@ Exception: the "visual_prompt" field must ALWAYS be written in English regardles
     - [Outro: industrial fade]: Kick continues alone, layers peel off one by one, ends in mechanical noise.
     - KICK spec (mandatory in music_style): punchy industrial kick — sharp transient attack, heavy sub body, no mud.
     - BPM: 128-135, instruments: industrial kick (sharp + heavy), acid synth TB-303, white noise sweeps, dark pad drones, percussive metal hits, hypnotic synth stabs, driving hi-hats.
+- IF genre == "Hardstyle":
+    - Lyrics: Focus exclusively on themes of RISE, POWER, FREEDOM, WARRIOR SPIRIT. Use battle-cry slogans ("We are unstoppable", "Rise from the dark", "Feel the power"). Chorus must be a massive crowd chant — short, punchy, repeatable. Every line must feel like a war cry.
+    - [Intro]: Signature bouncy reverse bass — the "nẩy" characteristic screech that defines Hardstyle identity. No kick yet, just tension building.
+    - [Breakdown]: Epic sorrow-to-triumph euphoric melody — wide, cinematic, emotionally overwhelming. Think Defqon.1 mainstage closing set energy. Supersaw leads + string pads + crowd breath. This section must feel like an army preparing to charge.
+    - [THE DROP]: Distorted hardkick detonates — each beat must feel like physical ground shaking. Describe as: "every kick creates seismic impact, chest-crushing weight". Layer distorted kick + reverse bass + screech on off-beats. No mercy, no pause.
+    - [Second Drop]: Even heavier than first — add pitch-shifted kick layer, double screech density.
+    - [Outro: crowd echo]: Melody returns softly, crowd chant fades into distant echo.
+    - KICK spec (mandatory in music_style): distorted hardkick — maximum low-end seismic punch, heavily distorted body, razor-sharp transient click, zero softness.
+    - Reverse bass must appear: before Intro drop, before every main drop, as accent hits during drops.
+    - BPM: 150-155, instruments: distorted hardkick, euphoric supersaw lead melody, reverse bass screech, crowd chant vocals, emotional cinematic string pads, powerful synth stabs.
 - IF genre == "Bass-Boosted club bangers":
     - Lyrics: ULTRA-MINIMAL. Max 4-6 words per line. Use aggressive action phrases only (e.g. "Feel the bass", "Drop it now", "Shake the floor"). No storytelling, no bridges with full sentences.
     - Repeat the hook phrase at least 4 times in a row at [THE DROP] section.

@@ -1,5 +1,10 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import anthropic
+from auth import (
+    google_signin_component, verify_and_load_user,
+    activate_plan, save_music_history, get_music_history, sign_out,
+)
 import requests
 import json
 import io
@@ -21,6 +26,87 @@ st.set_page_config(
 
 st.title("🎵 AI Music Producer Automation")
 st.markdown("---")
+
+# ---------------------------------------------------------------------------
+# Auth gate — Google Sign-In + Firebase
+# ---------------------------------------------------------------------------
+PLANS = {
+    "Ngày":  {"price": "0.99",  "desc": "Sử dụng trong 24h"},
+    "Tuần":  {"price": "4.99",  "desc": "Tiết kiệm 30%"},
+    "Tháng": {"price": "14.99", "desc": "Phổ biến nhất"},
+    "Năm":   {"price": "99.99", "desc": "Gói chuyên nghiệp (VIP)"},
+}
+
+def paypal_payment_component(price: str):
+    paypal_html = f"""
+    <div id="paypal-button-container"></div>
+    <script src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID&currency=USD"></script>
+    <script>
+        paypal.Buttons({{
+            createOrder: function(data, actions) {{
+                return actions.order.create({{
+                    purchase_units: [{{ amount: {{ value: '{price}' }} }}]
+                }});
+            }},
+            onApprove: function(data, actions) {{
+                return actions.order.capture().then(function(details) {{
+                    window.parent.postMessage({{type: 'payment_success', details: details}}, '*');
+                }});
+            }}
+        }}).render('#paypal-button-container');
+    </script>
+    """
+    components.html(paypal_html, height=450)
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+# Xử lý sign-out
+if st.query_params.get("signout"):
+    st.session_state.user = None
+    st.query_params.clear()
+    st.rerun()
+
+# Xử lý callback token từ Google Sign-In
+firebase_token = st.query_params.get("firebase_token")
+if firebase_token and not st.session_state.user:
+    with st.spinner("Đang xác thực tài khoản…"):
+        user = verify_and_load_user(firebase_token)
+    if user:
+        st.session_state.user = user
+    st.query_params.clear()
+    st.rerun()
+
+# Chưa đăng nhập → hiển thị trang login
+if not st.session_state.user:
+    st.markdown("### 👤 Đăng nhập để tiếp tục")
+    st.markdown("Sử dụng tài khoản Google của bạn để đăng nhập và quản lý gói dịch vụ.")
+    google_signin_component()
+    st.stop()
+
+# Đã đăng nhập
+_user = st.session_state.user
+st.sidebar.markdown(
+    f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:8px'>"
+    f"<img src='{_user['photo']}' width='36' style='border-radius:50%'/>"
+    f"<div><b>{_user['name']}</b><br/><small>{_user['email']}</small></div></div>",
+    unsafe_allow_html=True,
+)
+if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
+    sign_out()
+
+# Chưa thanh toán → hiển thị trang nâng cấp
+if not _user["is_paid"]:
+    st.header("🎟️ Nâng cấp tài khoản để tạo nhạc")
+    st.markdown(f"Xin chào **{_user['name']}**! Chọn gói dịch vụ phù hợp để bắt đầu.")
+    selected_plan = st.selectbox("Chọn gói dịch vụ:", list(PLANS.keys()))
+    plan_info = PLANS[selected_plan]
+    st.write(f"**Giá:** ${plan_info['price']} USD — {plan_info['desc']}")
+    paypal_payment_component(plan_info["price"])
+    st.warning("Vui lòng hoàn tất thanh toán để sử dụng tính năng tạo nhạc AI.")
+    st.stop()
+
+st.success(f"✅ Xin chào **{_user['name']}** — Gói **{_user['plan']}** đang hoạt động")
 
 # ---------------------------------------------------------------------------
 # Session state defaults
@@ -102,6 +188,12 @@ GENRE_CONFIG = {
         "style_tags": "Industrial Kick, Peak Time Techno, Driving Rhythm, Acid Synth, Dark Atmosphere, Hypnotic",
         "visual_vibe": "Cyberpunk brutalist architecture with raw concrete and exposed steel, cyclic mechanical gear movement in slow-motion, thin cold-white laser beams cutting through darkness, electric blue accent lighting on sharp geometric edges, underground rave tunnel perspective, monochromatic grey-black palette with single cyan highlight",
         "hashtags": "#techno #peaktime #drivingtechno #darktechno #industrial #underground",
+    },
+    "Hardstyle": {
+        "bpm": "150-155 BPM",
+        "style_tags": "Hardkick, Distorted Kick, Euphoric Melody, Screech, Reverse Bass, High Energy",
+        "visual_vibe": "Defqon.1 festival mainstage style, massive outdoor stage with towering fire pillars and pyrotechnic explosions, armored futuristic warrior characters in battle stance, crowd of thousands with raised fists, epic orange and gold flame lighting against dark night sky, cinematic wide-angle aerial shot",
+        "hashtags": "#hardstyle #euphorichardstyle #hardcore #gymmotivation #workoutmusic #defqon1",
     },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
@@ -649,6 +741,20 @@ with st.sidebar:
     create_mv = st.checkbox("Tạo kịch bản MV (Video 2)")
 
     st.divider()
+    if st.session_state.user:
+        with st.expander("🕘 Lịch sử tạo nhạc (20 gần nhất)", expanded=False):
+            try:
+                history = get_music_history(st.session_state.user["uid"])
+                if history:
+                    for h in history:
+                        ts = h.get("created_at")
+                        ts_str = ts.strftime("%d/%m %H:%M") if ts else ""
+                        st.caption(f"🎵 {h.get('topic','')} — {h.get('genre','')} — {h.get('num_tracks','')} bài  `{ts_str}`")
+                else:
+                    st.info("Chưa có lịch sử tạo nhạc.")
+            except Exception:
+                st.info("Không thể tải lịch sử.")
+    st.divider()
     generate_btn = st.button("🚀 Bắt đầu sản xuất", use_container_width=True, type="primary")
 
 # ---------------------------------------------------------------------------
@@ -839,6 +945,14 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                         "Title nên có: BPM + 'Peak Time' + năm (vd: *Dark Techno Driving Mix 130BPM 2026*). "
                         "Upload khung giờ 22:00–01:00 để bắt đúng đối tượng nghe nhạc đêm."
                     )
+                if music_genre == "Hardstyle":
+                    st.info(
+                        "💡 **Gợi ý Thumbnail Hardstyle:** Dùng tông màu **cam lửa** là chủ đạo. "
+                        "Hình ảnh nhân vật đang bùng nổ năng lượng hoặc biểu tượng loa sub bị nứt vỡ. "
+                        "**SEO Strategy:** Nhắm từ khóa **'Gym Motivation'**, **'Workout Music'**, "
+                        "'Euphoric Hardstyle Mix' — upload khung 05:00–07:00 sáng để bắt đúng "
+                        "giờ tập gym buổi sáng của người dùng."
+                    )
                 st.divider()
                 st.markdown(f"**BGM Suggestion:** {data.get('bgm_suggestion', '')}")
 
@@ -902,6 +1016,15 @@ if generate_btn:
                 "topic": topic, "num_tracks": num_tracks,
                 "create_mv": create_mv, "music_genre": music_genre,
             }
+            # Lưu lịch sử vào Firestore
+            if st.session_state.user:
+                try:
+                    save_music_history(
+                        st.session_state.user["uid"],
+                        topic, music_genre, num_tracks, result,
+                    )
+                except Exception:
+                    pass
             # Reset images & audio khi tạo plan mới
             st.session_state.images = {}
             st.session_state.suno_tracks = {}

@@ -1,0 +1,12 @@
+# Firebase credentials - KHÔNG push lên GitHub
+firebase_service_account.json
+*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Streamlit
+.streamlit/secrets.toml
