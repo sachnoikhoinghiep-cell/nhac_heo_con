@@ -220,39 +220,46 @@ def firebase_reset_password(email: str):
 # ---------------------------------------------------------------------------
 # Auth UI
 # ---------------------------------------------------------------------------
-def show_auth_ui():
-    # ── Khôi phục session từ cookie (không cần đăng nhập lại) ──────────────
-    if not st.session_state.get("user"):
-        rt = _load_rt()
-        if rt:
-            try:
-                new_token = firebase_refresh(rt)
-                user = verify_and_load_user(new_token)
-                if user:
-                    st.session_state.user = user
-                    st.rerun()
-            except Exception:
-                _clear_rt()
+def try_restore_session() -> bool:
+    """Khôi phục session từ cookie. Trả về True nếu thành công."""
+    if st.session_state.get("user"):
+        return True
+    rt = _load_rt()
+    if rt:
+        try:
+            new_token = firebase_refresh(rt)
+            user = verify_and_load_user(new_token)
+            if user:
+                st.session_state.user = user
+                return True
+        except Exception:
+            _clear_rt()
+    return False
 
-    st.markdown("### 👤 Đăng nhập để tiếp tục")
 
-    # ── Xử lý callback Google OAuth (?code=...) ────────────────────────────
+def handle_google_callback() -> bool:
+    """Xử lý ?code= OAuth callback. Trả về True nếu đăng nhập thành công."""
     google_code = st.query_params.get("code")
-    if google_code and not st.session_state.get("user"):
-        st.query_params.clear()
-        with st.spinner("Đang xác thực với Google…"):
-            try:
-                firebase_token, refresh_token = exchange_google_code(google_code)
-                user = verify_and_load_user(firebase_token)
-                if user:
-                    _save_rt(refresh_token)
-                    st.session_state.user = user
-                    st.rerun()
-                else:
-                    st.error("Không thể xác thực tài khoản. Thử lại.")
-            except Exception as e:
-                st.error(f"Lỗi Google Sign-In: {e}")
+    if not google_code or st.session_state.get("user"):
+        return False
+    st.query_params.clear()
+    with st.spinner("Đang xác thực với Google…"):
+        try:
+            firebase_token, refresh_token = exchange_google_code(google_code)
+            user = verify_and_load_user(firebase_token)
+            if user:
+                _save_rt(refresh_token)
+                st.session_state.user = user
+                return True
+            st.error("Không thể xác thực tài khoản. Thử lại.")
+        except Exception as e:
+            st.error(f"Lỗi Google Sign-In: {e}")
+    return False
 
+
+def show_auth_ui():
+    """Hiển thị UI đăng nhập (session restore & OAuth được xử lý ở router)."""
+    st.markdown("### 👤 Đăng nhập để tiếp tục")
     render_google_signin_button()
 
 
