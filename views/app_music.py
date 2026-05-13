@@ -690,6 +690,8 @@ def get_hot_topics(api_key: str, language: str) -> list:
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
+api_key = st.session_state.get("anthropic_api_key", "")
+
 with st.sidebar:
     st.header("⚙️ Cấu hình quy trình")
 
@@ -807,8 +809,6 @@ with st.sidebar:
                 st.info("Không thể tải lịch sử.")
     st.divider()
     generate_btn = st.button("🚀 Bắt đầu sản xuất", use_container_width=True, type="primary")
-
-api_key = st.session_state.get("anthropic_api_key", "")
 
 # ---------------------------------------------------------------------------
 # JSON parser
