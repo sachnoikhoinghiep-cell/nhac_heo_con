@@ -62,23 +62,24 @@ def render_google_signin_button():
     components.html(
         f"""
         <style>
-          * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-          body {{ background: transparent; font-family: 'Google Sans', Roboto, sans-serif; }}
-          button {{
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-            width: 100%; padding: 11px 16px;
-            background: #fff; border: 1.5px solid #dadce0; border-radius: 8px;
-            font-size: 15px; font-weight: 600; color: #3c4043; cursor: pointer;
-            box-shadow: 0 1px 3px rgba(0,0,0,.12); transition: background .15s;
+          * {{ box-sizing:border-box; margin:0; padding:0; }}
+          body {{ background:transparent; font-family:sans-serif; }}
+          a {{
+            display:flex; align-items:center; justify-content:center; gap:10px;
+            width:100%; padding:11px 16px;
+            background:#fff; border:1.5px solid #dadce0; border-radius:8px;
+            font-size:15px; font-weight:600; color:#3c4043;
+            text-decoration:none; cursor:pointer;
+            box-shadow:0 1px 3px rgba(0,0,0,.12);
           }}
-          button:hover {{ background: #f8f9fa; box-shadow: 0 2px 6px rgba(0,0,0,.18); }}
-          button:active {{ background: #f1f3f4; }}
-          img {{ width: 20px; height: 20px; }}
+          a:hover {{ background:#f8f9fa; }}
+          a:active {{ background:#f1f3f4; }}
+          img {{ width:20px; height:20px; flex-shrink:0; }}
         </style>
-        <button onclick="window.top.location.href='{auth_url}'">
+        <a href="{auth_url}" target="_top">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>
           Đăng nhập bằng Google
-        </button>
+        </a>
         """,
         height=54,
     )
