@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import anthropic
 from auth import (
-    google_signin_component, verify_and_load_user,
+    show_auth_ui, verify_and_load_user,
     activate_plan, save_music_history, get_music_history, sign_out,
 )
 import requests
@@ -61,27 +61,9 @@ def paypal_payment_component(price: str):
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# Xử lý sign-out
-if st.query_params.get("signout"):
-    st.session_state.user = None
-    st.query_params.clear()
-    st.rerun()
-
-# Xử lý callback token từ Google Sign-In
-firebase_token = st.query_params.get("firebase_token")
-if firebase_token and not st.session_state.user:
-    with st.spinner("Đang xác thực tài khoản…"):
-        user = verify_and_load_user(firebase_token)
-    if user:
-        st.session_state.user = user
-    st.query_params.clear()
-    st.rerun()
-
-# Chưa đăng nhập → hiển thị trang login
+# Chưa đăng nhập → hiển thị form login/register
 if not st.session_state.user:
-    st.markdown("### 👤 Đăng nhập để tiếp tục")
-    st.markdown("Sử dụng tài khoản Google của bạn để đăng nhập và quản lý gói dịch vụ.")
-    google_signin_component()
+    show_auth_ui()
     st.stop()
 
 # Đã đăng nhập
@@ -94,6 +76,7 @@ st.sidebar.markdown(
 )
 if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
     sign_out()
+    st.stop()
 
 # Chưa thanh toán → hiển thị trang nâng cấp
 if not _user["is_paid"]:

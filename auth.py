@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import requests
 from firebase_admin import auth, firestore as fs
 from firebase_config import init_firebase
 from datetime import datetime, timezone, timedelta
@@ -11,77 +11,139 @@ PLAN_DURATION = {
     "Năm":   timedelta(days=365),
 }
 
+# Firebase REST API key (public — dùng cho client-side auth)
+FIREBASE_API_KEY = "AIzaSyBl3BYwj_E3v4ppfFUHXY1WpWx7r_6H5bA"
+FIREBASE_REST = "https://identitytoolkit.googleapis.com/v1/accounts"
+
 
 # ---------------------------------------------------------------------------
-# Google Sign-In component (Firebase JS SDK)
+# Firebase REST API — Email/Password (không dùng JS SDK, không lỗi iframe)
 # ---------------------------------------------------------------------------
-FIREBASE_WEB_CONFIG = {
-    "apiKey":            "AIzaSyBl3BYwj_E3v4ppfFUHXY1WpWx7r_6H5bA",
-    "authDomain":        "nhacheocon.firebaseapp.com",
-    "projectId":         "nhacheocon",
-    "storageBucket":     "nhacheocon.firebasestorage.app",
-    "messagingSenderId": "551560059881",
-    "appId":             "1:551560059881:web:863e343e5f273c8532c978",
-}
+def firebase_email_login(email: str, password: str) -> str:
+    """Đăng nhập, trả về idToken."""
+    resp = requests.post(
+        f"{FIREBASE_REST}:signInWithPassword?key={FIREBASE_API_KEY}",
+        json={"email": email, "password": password, "returnSecureToken": True},
+        timeout=10,
+    )
+    data = resp.json()
+    if "error" in data:
+        msg = data["error"]["message"]
+        friendly = {
+            "INVALID_LOGIN_CREDENTIALS": "Email hoặc mật khẩu không đúng.",
+            "EMAIL_NOT_FOUND":           "Email chưa được đăng ký.",
+            "INVALID_PASSWORD":          "Mật khẩu không đúng.",
+            "USER_DISABLED":             "Tài khoản đã bị vô hiệu hóa.",
+        }
+        raise ValueError(friendly.get(msg, msg))
+    return data["idToken"]
 
 
-def google_signin_component():
-    """Hiển thị nút Google Sign-In; sau khi đăng nhập trả token về qua URL param."""
-    import json
-    cfg_json = json.dumps(FIREBASE_WEB_CONFIG)
-    html = f"""
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <style>
-      body {{ margin:0; font-family: sans-serif; background: transparent; }}
-      #btn {{
-        display:flex; align-items:center; gap:12px; padding:12px 24px;
-        background:#fff; border:1px solid #ddd; border-radius:8px;
-        cursor:pointer; font-size:16px; font-weight:600; color:#333;
-        box-shadow: 0 2px 8px rgba(0,0,0,.12);
-      }}
-      #btn:hover {{ background:#f5f5f5; }}
-      #btn img {{ width:24px; }}
-      #err {{ color:red; margin-top:10px; font-size:13px; }}
-    </style>
-    <button id="btn" onclick="signIn()">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>
-      Đăng nhập bằng Google
-    </button>
-    <div id="err"></div>
-    <script>
-      const cfg = {cfg_json};
-      if (!firebase.apps.length) firebase.initializeApp(cfg);
-      const fbAuth = firebase.auth();
+def firebase_email_register(email: str, password: str) -> str:
+    """Đăng ký tài khoản mới, trả về idToken."""
+    resp = requests.post(
+        f"{FIREBASE_REST}:signUp?key={FIREBASE_API_KEY}",
+        json={"email": email, "password": password, "returnSecureToken": True},
+        timeout=10,
+    )
+    data = resp.json()
+    if "error" in data:
+        msg = data["error"]["message"]
+        friendly = {
+            "EMAIL_EXISTS":              "Email này đã được đăng ký.",
+            "WEAK_PASSWORD":             "Mật khẩu phải có ít nhất 6 ký tự.",
+            "INVALID_EMAIL":             "Địa chỉ email không hợp lệ.",
+        }
+        raise ValueError(friendly.get(msg, msg))
+    return data["idToken"]
 
-      function signIn() {{
-        const btn = document.getElementById('btn');
-        btn.disabled = true;
-        btn.innerText = 'Đang đăng nhập…';
-        const provider = new firebase.auth.GoogleAuthProvider();
-        fbAuth.signInWithPopup(provider)
-          .then(result => result.user.getIdToken())
-          .then(token => {{
-            const url = new URL(window.parent.location.href);
-            url.searchParams.set('firebase_token', token);
-            window.parent.location.href = url.toString();
-          }})
-          .catch(err => {{
-            document.getElementById('err').innerText = 'Lỗi: ' + err.message;
-            btn.disabled = false;
-            btn.innerHTML =
-              '<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/> Đăng nhập bằng Google';
-          }});
-      }}
-    </script>
-    """
-    components.html(html, height=110)
+
+def firebase_reset_password(email: str):
+    """Gửi email đặt lại mật khẩu."""
+    resp = requests.post(
+        f"{FIREBASE_REST}:sendOobCode?key={FIREBASE_API_KEY}",
+        json={"requestType": "PASSWORD_RESET", "email": email},
+        timeout=10,
+    )
+    data = resp.json()
+    if "error" in data:
+        raise ValueError(data["error"]["message"])
+
+
+# ---------------------------------------------------------------------------
+# Streamlit login / register UI
+# ---------------------------------------------------------------------------
+def show_auth_ui():
+    """Hiển thị form đăng nhập / đăng ký — không dùng iframe, không lỗi môi trường."""
+    st.markdown("### 👤 Đăng nhập để tiếp tục")
+
+    tab_login, tab_register = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký"])
+
+    with tab_login:
+        with st.form("login_form"):
+            email    = st.text_input("Email", placeholder="you@gmail.com")
+            password = st.text_input("Mật khẩu", type="password")
+            col1, col2 = st.columns([2, 1])
+            submitted = col1.form_submit_button("Đăng nhập", use_container_width=True, type="primary")
+            reset_btn = col2.form_submit_button("Quên mật khẩu?", use_container_width=True)
+
+        if submitted and email and password:
+            with st.spinner("Đang xác thực…"):
+                try:
+                    token = firebase_email_login(email, password)
+                    user  = verify_and_load_user(token, email=email)
+                    if user:
+                        st.session_state.user = user
+                        st.rerun()
+                    else:
+                        st.error("Không thể xác thực tài khoản. Thử lại.")
+                except ValueError as e:
+                    st.error(str(e))
+
+        if reset_btn and email:
+            try:
+                firebase_reset_password(email)
+                st.success(f"Đã gửi email đặt lại mật khẩu tới **{email}**")
+            except Exception as e:
+                st.error(str(e))
+        elif reset_btn and not email:
+            st.warning("Nhập email trước rồi bấm 'Quên mật khẩu?'")
+
+    with tab_register:
+        with st.form("register_form"):
+            r_name     = st.text_input("Tên hiển thị", placeholder="Nguyễn Văn A")
+            r_email    = st.text_input("Email", placeholder="you@gmail.com")
+            r_password = st.text_input("Mật khẩu (tối thiểu 6 ký tự)", type="password")
+            r_confirm  = st.text_input("Xác nhận mật khẩu", type="password")
+            r_submit   = st.form_submit_button("Tạo tài khoản", use_container_width=True, type="primary")
+
+        if r_submit:
+            if not all([r_name, r_email, r_password, r_confirm]):
+                st.warning("Vui lòng điền đầy đủ thông tin.")
+            elif r_password != r_confirm:
+                st.error("Mật khẩu xác nhận không khớp.")
+            else:
+                with st.spinner("Đang tạo tài khoản…"):
+                    try:
+                        token = firebase_email_register(r_email, r_password)
+                        # Cập nhật displayName sau khi đăng ký
+                        try:
+                            fb_user = auth.get_user_by_email(r_email)
+                            auth.update_user(fb_user.uid, display_name=r_name)
+                        except Exception:
+                            pass
+                        user = verify_and_load_user(token, email=r_email, name=r_name)
+                        if user:
+                            st.session_state.user = user
+                            st.rerun()
+                    except ValueError as e:
+                        st.error(str(e))
 
 
 # ---------------------------------------------------------------------------
 # Token verification & user loading
 # ---------------------------------------------------------------------------
-def verify_and_load_user(token: str) -> dict | None:
+def verify_and_load_user(token: str, email: str = "", name: str = "", photo: str = "") -> dict | None:
     """Xác minh Firebase ID token, tạo/load user trên Firestore."""
     db = init_firebase()
     try:
@@ -89,13 +151,14 @@ def verify_and_load_user(token: str) -> dict | None:
     except Exception:
         return None
 
-    uid        = decoded["uid"]
-    email      = decoded.get("email", "")
-    name       = decoded.get("name", "")
-    photo      = decoded.get("picture", "")
-    now        = datetime.now(timezone.utc)
-    user_ref   = db.collection("users").document(uid)
-    doc        = user_ref.get()
+    uid   = decoded["uid"]
+    email = decoded.get("email", "") or email
+    name  = decoded.get("name",  "") or name
+    photo = decoded.get("picture", "") or photo
+    now   = datetime.now(timezone.utc)
+
+    user_ref = db.collection("users").document(uid)
+    doc      = user_ref.get()
 
     if not doc.exists:
         user_ref.set({
@@ -114,15 +177,18 @@ def verify_and_load_user(token: str) -> dict | None:
     expires_at = data.get("expires_at")
     is_paid    = data.get("is_paid", False)
 
-    # Tự động hết hạn
     if is_paid and expires_at and expires_at < now:
         user_ref.update({"is_paid": False})
         is_paid = False
 
+    # Cập nhật name nếu lần đầu đăng ký có tên
+    if name and not data.get("name"):
+        user_ref.update({"name": name})
+
     return {
         "uid":     uid,
         "email":   email or data.get("email", ""),
-        "name":    name  or data.get("name", ""),
+        "name":    name  or data.get("name", email.split("@")[0]),
         "photo":   photo or data.get("photo_url", ""),
         "is_paid": is_paid,
         "plan":    data.get("plan"),
@@ -175,5 +241,4 @@ def get_music_history(uid: str) -> list:
 # ---------------------------------------------------------------------------
 def sign_out():
     st.session_state.user = None
-    st.query_params.clear()
     st.rerun()
