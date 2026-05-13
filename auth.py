@@ -36,15 +36,10 @@ def _redirect_uri() -> str:
 # ---------------------------------------------------------------------------
 # Google OAuth 2.0 — Implicit flow (redirect window.top, bypass iframe sandbox)
 # ---------------------------------------------------------------------------
-def google_oauth_redirect():
-    """Redirect toàn bộ trình duyệt (window.top) sang Google OAuth — không dùng iframe."""
+def _build_google_auth_url() -> str:
     client_id    = _google_client_id()
     redirect_uri = _redirect_uri()
-    if not client_id:
-        st.error("Chưa cấu hình GOOGLE_CLIENT_ID trong secrets.")
-        return
-
-    auth_url = (
+    return (
         "https://accounts.google.com/o/oauth2/v2/auth"
         f"?client_id={urllib.parse.quote(client_id)}"
         f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
@@ -52,10 +47,29 @@ def google_oauth_redirect():
         "&scope=openid%20email%20profile"
         "&prompt=select_account"
     )
-    # Dùng component height=0 để redirect window.top (không phải iframe)
-    components.html(
-        f"<script>window.top.location.href = {repr(auth_url)};</script>",
-        height=0,
+
+
+def render_google_signin_button():
+    """Render nút Google Sign-In dưới dạng thẻ <a> thật — click trực tiếp điều hướng trình duyệt."""
+    if not _google_client_id():
+        st.info("💡 Thêm `GOOGLE_CLIENT_ID` và `REDIRECT_URI` vào Streamlit secrets để bật Google Sign-In.")
+        return
+
+    auth_url = _build_google_auth_url()
+    st.markdown(
+        f"""
+        <a href="{auth_url}" target="_top" style="
+            display:flex; align-items:center; justify-content:center; gap:10px;
+            width:100%; padding:11px 0; margin-bottom:4px;
+            background:#fff; border:1.5px solid #dadce0; border-radius:8px;
+            font-size:15px; font-weight:600; color:#3c4043;
+            text-decoration:none; box-shadow:0 1px 3px rgba(0,0,0,.12);
+        ">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20"/>
+            Đăng nhập bằng Google
+        </a>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -179,29 +193,8 @@ def show_auth_ui():
             except Exception as e:
                 st.error(f"Lỗi Google Sign-In: {e}")
 
-    # ── Nút Google Sign-In ──────────────────────────────────────────────────
-    st.markdown(
-        """
-        <style>
-        .google-btn {
-            display:flex; align-items:center; justify-content:center; gap:10px;
-            width:100%; padding:10px 0; background:#fff;
-            border:1.5px solid #dadce0; border-radius:8px;
-            font-size:15px; font-weight:600; color:#3c4043;
-            cursor:pointer; text-decoration:none;
-            box-shadow:0 1px 3px rgba(0,0,0,.12);
-        }
-        .google-btn:hover { background:#f8f9fa; box-shadow:0 2px 6px rgba(0,0,0,.15); }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    if _google_client_id():
-        if st.button("🔵  Đăng nhập bằng Google", use_container_width=True):
-            google_oauth_redirect()
-    else:
-        st.info("💡 Thêm `GOOGLE_CLIENT_ID` vào Streamlit secrets để bật Google Sign-In.")
-
+    # ── Nút Google Sign-In (anchor tag thật, không qua iframe) ─────────────
+    render_google_signin_button()
     st.divider()
 
     tab_login, tab_register = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký"])
