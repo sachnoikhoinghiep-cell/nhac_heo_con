@@ -343,10 +343,8 @@ MAX_SUNO_WORKERS = 15   # giới hạn thực tế qua test: 15 luồng song son
 
 def suno_generate_task(api_key: str, title: str, style: str, lyrics: str, model: str) -> str:
     """Submit generation job, return taskId."""
-    # V4 / V4_5ALL max title 80 chars; others 100 chars
     title_max = 80 if model in ("V4", "V4_5ALL") else 100
-    # style fallback nếu Claude trả về rỗng
-    safe_style = (style.strip() or "cheerful children's music, upbeat, catchy melody, fun")[:1000]
+    safe_style = (style.strip() or "cheerful children's music, upbeat, catchy melody, fun")[:200]
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -358,13 +356,12 @@ def suno_generate_task(api_key: str, title: str, style: str, lyrics: str, model:
         "model": model,
         "title": title[:title_max],
         "style": safe_style,
-        "prompt": lyrics[:5000],
-        "callBackUrl": "https://httpbin.org/post",  # bắt buộc; dùng polling nên không cần webhook thật
+        "prompt": lyrics[:3000],   # Suno hard limit ~3000 chars
+        "callBackUrl": "https://httpbin.org/post",
     }
 
     resp = requests.post(f"{SUNO_BASE}/generate", json=payload, headers=headers, timeout=30)
 
-    # Hiển thị lỗi chi tiết thay vì raise_for_status mù
     if not resp.ok:
         try:
             err_body = resp.json()
@@ -456,7 +453,8 @@ def suno_poll_with_ui(api_key: str, task_id: str,
         if status == "SUCCESS":
             return data["response"]["sunoData"]
         if status in SUNO_FAIL_STATUS:
-            raise ValueError(f"Suno thất bại ({status}): {data.get('errorMessage', status)}")
+            err_msg = data.get("errorMessage") or data.get("msg") or status
+            raise ValueError(f"Suno thất bại ({status}): {err_msg}")
 
         time.sleep(8)
 
@@ -479,36 +477,41 @@ def run_suno_generation(title: str, style: str, lyrics: str, track_key: str):
     preview_slot = st.empty()
     dl_slot      = st.empty()
 
-    try:
-        info_slot.info(f"📤 Gửi yêu cầu tới Suno: **{title[:60]}**")
-        task_id = suno_generate_task(suno_key, title, style, lyrics, model)
-        info_slot.info(f"🆔 Task: `{task_id}` — chờ Suno sinh nhạc (2–3 phút)…")
+    MAX_ATTEMPTS = 2
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            info_slot.info(f"📤 Gửi yêu cầu tới Suno: **{title[:60]}**"
+                           + (f" (lần {attempt})" if attempt > 1 else ""))
+            task_id = suno_generate_task(suno_key, title, style, lyrics, model)
+            info_slot.info(f"🆔 Task: `{task_id}` — chờ Suno sinh nhạc (2–3 phút)…")
 
-        # Hiển thị thanh tiến trình + preview streaming
-        bar = bar_slot.progress(0.0, text="⏳ Đang khởi động…")
-        suno_list = suno_poll_with_ui(suno_key, task_id, bar, preview_slot)
+            bar = bar_slot.progress(0.0, text="⏳ Đang khởi động…")
+            suno_list = suno_poll_with_ui(suno_key, task_id, bar, preview_slot)
 
-        # Hoàn thành — lưu metadata
-        st.session_state.suno_tracks[track_key] = suno_list
-        bar_slot.progress(1.0, text="✅ 100% — Đang tải MP3 full track…")
+            st.session_state.suno_tracks[track_key] = suno_list
+            bar_slot.progress(1.0, text="✅ 100% — Đang tải MP3 full track…")
 
-        # Tải MP3 full cho cả 2 version
-        for vi, track in enumerate(suno_list):
-            url = track.get("audioUrl", "")
-            if url:
-                st.session_state.suno_audio[f"{track_key}_v{vi}"] = _fetch_audio_bytes(url)
+            for vi, track in enumerate(suno_list):
+                url = track.get("audioUrl", "")
+                if url:
+                    st.session_state.suno_audio[f"{track_key}_v{vi}"] = _fetch_audio_bytes(url)
 
-        durations = " / ".join(fmt_duration(t.get("duration")) for t in suno_list)
-        info_slot.success(f"✅ Hoàn thành: **{title}** — Duration: {durations}")
-        bar_slot.empty()
-        preview_slot.empty()
-        dl_slot.empty()
-        st.rerun()
+            durations = " / ".join(fmt_duration(t.get("duration")) for t in suno_list)
+            info_slot.success(f"✅ Hoàn thành: **{title}** — Duration: {durations}")
+            bar_slot.empty()
+            preview_slot.empty()
+            dl_slot.empty()
+            st.rerun()
+            return
 
-    except Exception as e:
-        bar_slot.empty()
-        preview_slot.empty()
-        info_slot.error(f"❌ {e}")
+        except Exception as e:
+            bar_slot.empty()
+            preview_slot.empty()
+            if attempt < MAX_ATTEMPTS:
+                info_slot.warning(f"⚠️ Lần {attempt} thất bại ({e}) — thử lại sau 5s…")
+                time.sleep(5)
+            else:
+                info_slot.error(f"❌ {e}")
 
 
 def generate_all_tracks(items: list, max_workers: int = 5):
@@ -586,7 +589,8 @@ def generate_all_tracks(items: list, max_workers: int = 5):
                     statuses[tk] = f"done ✅ {dur}"
                     completed.add(tk)
                 elif status in SUNO_FAIL_STATUS:
-                    statuses[tk] = f"FAIL {data.get('errorMessage', status)[:50]}"
+                    err_msg = data.get("errorMessage") or data.get("msg") or status
+                    statuses[tk] = f"FAIL {str(err_msg)[:50]}"
                     completed.add(tk)
             except Exception as e:
                 statuses[tk] = f"poll error: {str(e)[:40]}"
