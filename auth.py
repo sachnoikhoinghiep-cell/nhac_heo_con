@@ -317,22 +317,40 @@ def activate_plan(uid: str, plan: str):
 
 
 def save_music_history(uid: str, topic: str, genre: str, num_tracks: int, result: dict):
-    db = init_firebase()
+    db  = init_firebase()
+    now = datetime.now(timezone.utc)
     db.collection("users").document(uid).collection("music_history").add({
         "topic": topic, "genre": genre, "num_tracks": num_tracks,
-        "created_at": datetime.now(timezone.utc), "result": result,
+        "created_at": now,
+        "expire_at":  now + timedelta(hours=72),
+        "result": result,
     })
 
 
 def get_music_history(uid: str) -> list:
-    db   = init_firebase()
-    docs = (
-        db.collection("users").document(uid)
-          .collection("music_history")
-          .order_by("created_at", direction=fs.Query.DESCENDING)
-          .limit(20).stream()
-    )
-    return [{"id": d.id, **d.to_dict()} for d in docs]
+    db      = init_firebase()
+    now     = datetime.now(timezone.utc)
+    cutoff  = now - timedelta(hours=72)
+    col     = db.collection("users").document(uid).collection("music_history")
+
+    # Lấy 20 bài gần nhất, lọc & xóa bài đã hết hạn
+    docs    = list(col.order_by("created_at", direction=fs.Query.DESCENDING).limit(20).stream())
+    valid, to_delete = [], []
+    for doc in docs:
+        d       = doc.to_dict()
+        created = d.get("created_at")
+        if created and created < cutoff:
+            to_delete.append(doc.reference)
+        else:
+            valid.append({"id": doc.id, **d})
+
+    if to_delete:
+        batch = db.batch()
+        for ref in to_delete:
+            batch.delete(ref)
+        batch.commit()
+
+    return valid
 
 
 def sign_out():
