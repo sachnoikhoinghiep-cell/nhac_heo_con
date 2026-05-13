@@ -659,6 +659,37 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
         run_suno_generation(title, style, lyrics, track_key)
 
 # ---------------------------------------------------------------------------
+# JSON helpers
+# ---------------------------------------------------------------------------
+def _fix_control_chars(s: str) -> str:
+    """Escape literal control characters inside JSON string values."""
+    result = []
+    in_string = False
+    skip_next = False
+    for ch in s:
+        if skip_next:
+            result.append(ch)
+            skip_next = False
+        elif ch == "\\" and in_string:
+            result.append(ch)
+            skip_next = True
+        elif ch == '"':
+            in_string = not in_string
+            result.append(ch)
+        elif in_string and ch == "\n":
+            result.append("\\n")
+        elif in_string and ch == "\r":
+            result.append("\\r")
+        elif in_string and ch == "\t":
+            result.append("\\t")
+        elif in_string and ord(ch) < 0x20:
+            result.append(f"\\u{ord(ch):04x}")
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+# ---------------------------------------------------------------------------
 # Hot topic suggestions
 # ---------------------------------------------------------------------------
 def get_hot_topics(api_key: str, language: str) -> list:
@@ -685,7 +716,7 @@ def get_hot_topics(api_key: str, language: str) -> list:
         raw = raw.split("```json")[1].split("```")[0].strip()
     elif "```" in raw:
         raw = raw.split("```")[1].split("```")[0].strip()
-    return json.loads(raw)
+    return json.loads(_fix_control_chars(raw))
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -818,7 +849,7 @@ def parse_json(raw: str) -> dict:
         raw = raw.split("```json")[1].split("```")[0].strip()
     elif "```" in raw:
         raw = raw.split("```")[1].split("```")[0].strip()
-    return json.loads(raw)
+    return json.loads(_fix_control_chars(raw))
 
 # ---------------------------------------------------------------------------
 # Claude API calls
