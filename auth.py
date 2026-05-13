@@ -5,6 +5,35 @@ import os
 from firebase_admin import auth, firestore as fs
 from firebase_config import init_firebase
 from datetime import datetime, timezone, timedelta
+import extra_streamlit_components as stx
+
+_COOKIE_KEY  = "nhacheocon_rt"
+_COOKIE_DAYS = 30
+
+@st.cache_resource
+def _cookie_mgr():
+    return stx.CookieManager(key="nhacheocon_cm")
+
+def _save_rt(refresh_token: str):
+    try:
+        _cookie_mgr().set(
+            _COOKIE_KEY, refresh_token,
+            expires_at=datetime.now() + timedelta(days=_COOKIE_DAYS),
+        )
+    except Exception:
+        pass
+
+def _load_rt() -> str:
+    try:
+        return _cookie_mgr().get(_COOKIE_KEY) or ""
+    except Exception:
+        return ""
+
+def _clear_rt():
+    try:
+        _cookie_mgr().delete(_COOKIE_KEY)
+    except Exception:
+        pass
 
 PLAN_DURATION = {
     "Ngày":  timedelta(days=1),
@@ -45,9 +74,8 @@ def _build_google_auth_url() -> str:
     )
 
 
-def exchange_google_code(code: str) -> str:
-    """Đổi authorization code → Google tokens → Firebase ID token."""
-    # Bước 1: đổi code lấy Google token
+def exchange_google_code(code: str) -> tuple[str, str]:
+    """Đổi authorization code → Firebase ID token + refresh token."""
     resp = requests.post(
         "https://oauth2.googleapis.com/token",
         data={
@@ -66,7 +94,6 @@ def exchange_google_code(code: str) -> str:
     access_token = token_data.get("access_token", "")
     id_token     = token_data.get("id_token", "")
 
-    # Bước 2: đổi Google token lấy Firebase ID token
     post_body = f"access_token={access_token}&providerId=google.com"
     if id_token:
         post_body = f"id_token={id_token}&access_token={access_token}&providerId=google.com"
@@ -84,7 +111,20 @@ def exchange_google_code(code: str) -> str:
     data2 = resp2.json()
     if "error" in data2:
         raise ValueError(data2["error"]["message"])
-    return data2["idToken"]
+    return data2["idToken"], data2.get("refreshToken", "")
+
+
+def firebase_refresh(refresh_token: str) -> str:
+    """Dùng refresh token lấy ID token mới."""
+    resp = requests.post(
+        f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}",
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=10,
+    )
+    data = resp.json()
+    if "error" in data:
+        raise ValueError(data.get("error", {}).get("message", "Token refresh failed"))
+    return data["id_token"]
 
 
 def render_google_signin_button():
@@ -155,6 +195,19 @@ def firebase_reset_password(email: str):
 # Auth UI
 # ---------------------------------------------------------------------------
 def show_auth_ui():
+    # ── Khôi phục session từ cookie (không cần đăng nhập lại) ──────────────
+    if not st.session_state.get("user"):
+        rt = _load_rt()
+        if rt:
+            try:
+                new_token = firebase_refresh(rt)
+                user = verify_and_load_user(new_token)
+                if user:
+                    st.session_state.user = user
+                    st.rerun()
+            except Exception:
+                _clear_rt()
+
     st.markdown("### 👤 Đăng nhập để tiếp tục")
 
     # ── Xử lý callback Google OAuth (?code=...) ────────────────────────────
@@ -163,9 +216,10 @@ def show_auth_ui():
         st.query_params.clear()
         with st.spinner("Đang xác thực với Google…"):
             try:
-                firebase_token = exchange_google_code(google_code)
+                firebase_token, refresh_token = exchange_google_code(google_code)
                 user = verify_and_load_user(firebase_token)
                 if user:
+                    _save_rt(refresh_token)
                     st.session_state.user = user
                     st.rerun()
                 else:
@@ -256,5 +310,6 @@ def get_music_history(uid: str) -> list:
 
 
 def sign_out():
+    _clear_rt()
     st.session_state.user = None
     st.rerun()
