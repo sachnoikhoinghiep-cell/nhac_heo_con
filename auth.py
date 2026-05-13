@@ -10,7 +10,6 @@ import extra_streamlit_components as stx
 _COOKIE_KEY  = "nhacheocon_rt"
 _COOKIE_DAYS = 30
 
-@st.cache_resource
 def _cookie_mgr():
     return stx.CookieManager(key="nhacheocon_cm")
 
