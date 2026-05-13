@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import anthropic
 from auth import (
     show_auth_ui, verify_and_load_user,
@@ -37,29 +36,25 @@ PLANS = {
     "Năm":   {"price": "99.99", "desc": "Gói chuyên nghiệp (VIP)"},
 }
 
-def paypal_payment_component(price: str):
-    paypal_html = f"""
-    <div id="paypal-button-container"></div>
-    <script src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID&currency=USD"></script>
-    <script>
-        paypal.Buttons({{
-            createOrder: function(data, actions) {{
-                return actions.order.create({{
-                    purchase_units: [{{ amount: {{ value: '{price}' }} }}]
-                }});
-            }},
-            onApprove: function(data, actions) {{
-                return actions.order.capture().then(function(details) {{
-                    window.parent.postMessage({{type: 'payment_success', details: details}}, '*');
-                }});
-            }}
-        }}).render('#paypal-button-container');
-    </script>
-    """
-    components.html(paypal_html, height=450)
+def _paypal_client_id() -> str:
+    try:    return st.secrets["PAYPAL_CLIENT_ID"]
+    except Exception: return os.environ.get("PAYPAL_CLIENT_ID", "")
 
-if "user" not in st.session_state:
-    st.session_state.user = None
+def _paypal_secret() -> str:
+    try:    return st.secrets["PAYPAL_SECRET"]
+    except Exception: return os.environ.get("PAYPAL_SECRET", "")
+
+def _app_url() -> str:
+    try:    return st.secrets["REDIRECT_URI"].rstrip("/")
+    except Exception: return os.environ.get("REDIRECT_URI", "http://localhost:8501")
+
+for _k, _v in {
+    "user": None,
+    "paypal_approval_url": None,
+    "paypal_selected_plan": None,
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 # Chưa đăng nhập → hiển thị form login/register
 if not st.session_state.user:
@@ -78,14 +73,74 @@ if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
     sign_out()
     st.stop()
 
+# Xử lý callback PayPal (phải trước payment gate)
+_pp_token    = st.query_params.get("token")
+_pp_payer_id = st.query_params.get("PayerID")
+if _pp_token and _pp_payer_id:
+    st.query_params.clear()
+    with st.spinner("Đang xác nhận thanh toán PayPal…"):
+        try:
+            from paypal import capture_order as _pp_capture
+            _pp_result = _pp_capture(_paypal_client_id(), _paypal_secret(), _pp_token)
+            if _pp_result.get("status") == "COMPLETED":
+                _plan = _pp_result["purchase_units"][0].get("custom_id", "Tháng")
+                activate_plan(_user["uid"], _plan)
+                st.session_state.user["is_paid"] = True
+                st.session_state.user["plan"]    = _plan
+                st.session_state.paypal_approval_url = None
+                st.success(f"Thanh toán thành công! Gói **{_plan}** đã được kích hoạt.")
+                st.rerun()
+            else:
+                st.error(f"PayPal: đơn hàng chưa hoàn tất (status: {_pp_result.get('status')})")
+        except Exception as _e:
+            st.error(f"Lỗi xác nhận PayPal: {_e}")
+elif _pp_token and not _pp_payer_id:
+    st.query_params.clear()
+    st.warning("Bạn đã hủy thanh toán PayPal.")
+    st.session_state.paypal_approval_url = None
+
 # Chưa thanh toán → hiển thị trang nâng cấp
 if not _user["is_paid"]:
     st.header("🎟️ Nâng cấp tài khoản để tạo nhạc")
     st.markdown(f"Xin chào **{_user['name']}**! Chọn gói dịch vụ phù hợp để bắt đầu.")
-    selected_plan = st.selectbox("Chọn gói dịch vụ:", list(PLANS.keys()))
-    plan_info = PLANS[selected_plan]
-    st.write(f"**Giá:** ${plan_info['price']} USD — {plan_info['desc']}")
-    paypal_payment_component(plan_info["price"])
+
+    selected_plan = st.selectbox("Chọn gói dịch vụ:", list(PLANS.keys()), key="selected_plan_key")
+    plan_info     = PLANS[selected_plan]
+    st.markdown(f"**Giá:** ${plan_info['price']} USD — {plan_info['desc']}")
+    st.divider()
+
+    if st.session_state.paypal_selected_plan != selected_plan:
+        st.session_state.paypal_approval_url  = None
+        st.session_state.paypal_selected_plan = selected_plan
+
+    if st.session_state.paypal_approval_url:
+        st.info(f"Đã tạo đơn hàng — Gói **{selected_plan}** — ${plan_info['price']} USD")
+        st.link_button(
+            "💳 Tiếp tục thanh toán trên PayPal",
+            st.session_state.paypal_approval_url,
+            type="primary",
+            use_container_width=True,
+        )
+        if st.button("🔄 Tạo lại đơn hàng mới", use_container_width=True):
+            st.session_state.paypal_approval_url = None
+            st.rerun()
+    else:
+        if st.button("💳 Thanh toán qua PayPal", type="primary", use_container_width=True):
+            with st.spinner("Đang tạo đơn hàng PayPal…"):
+                try:
+                    from paypal import create_order as _pp_create
+                    _app_u = _app_url()
+                    _, _approval = _pp_create(
+                        _paypal_client_id(), _paypal_secret(),
+                        plan_info["price"], selected_plan,
+                        _app_u, _app_u,
+                    )
+                    st.session_state.paypal_approval_url  = _approval
+                    st.session_state.paypal_selected_plan = selected_plan
+                    st.rerun()
+                except Exception as _e:
+                    st.error(f"Lỗi tạo đơn hàng PayPal: {_e}")
+
     st.warning("Vui lòng hoàn tất thanh toán để sử dụng tính năng tạo nhạc AI.")
     st.stop()
 
