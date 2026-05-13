@@ -3,6 +3,7 @@ import anthropic
 from auth import (
     show_auth_ui, verify_and_load_user,
     activate_plan, save_music_history, get_music_history, sign_out,
+    save_api_keys, load_api_keys,
 )
 import requests
 import json
@@ -158,11 +159,22 @@ for _k, _v in {
     "music_result": None,
     "music_meta": {},
     "images": {},
-    "suno_tracks": {},   # track_key -> list[dict] (2 versions from Suno)
-    "suno_audio": {},    # f"{track_key}_v{0|1}" -> bytes
+    "suno_tracks": {},
+    "suno_audio": {},
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
+# Load API keys từ cookie (chỉ lần đầu)
+if "api_keys_loaded" not in st.session_state:
+    _saved = load_api_keys()
+    if _saved.get("anthropic"):
+        st.session_state.anthropic_api_key = _saved["anthropic"]
+    if _saved.get("google"):
+        st.session_state.google_api_keys_raw = _saved["google"]
+    if _saved.get("suno"):
+        st.session_state.suno_api_key = _saved["suno"]
+    st.session_state.api_keys_loaded = True
 
 # ---------------------------------------------------------------------------
 # Batch size logic
@@ -689,10 +701,10 @@ def get_hot_topics(api_key: str, language: str) -> list:
 with st.sidebar:
     st.header("⚙️ Cấu hình quy trình")
 
-    api_key = st.text_input(
+    st.text_input(
         "Anthropic API Key:",
         type="password",
-        value=os.environ.get("ANTHROPIC_API_KEY", ""),
+        key="anthropic_api_key",
         placeholder="sk-ant-...",
     )
 
@@ -712,8 +724,8 @@ with st.sidebar:
     st.text_input(
         "Suno API Key:",
         type="password",
-        value="0a24dc07b9d2067e242d88f276d2b852",
         key="suno_api_key",
+        placeholder="Suno API key...",
     )
     st.selectbox(
         "Suno Model:",
@@ -721,6 +733,14 @@ with st.sidebar:
         key="suno_model",
         help="V4_5/V5: up to 8 phút | V4: up to 4 phút",
     )
+
+    if st.button("💾 Lưu API Keys", use_container_width=True):
+        save_api_keys(
+            st.session_state.get("anthropic_api_key", ""),
+            st.session_state.get("google_api_keys_raw", ""),
+            st.session_state.get("suno_api_key", ""),
+        )
+        st.success("Đã lưu! Lần sau vào app sẽ tự điền.")
 
     st.divider()
     st.subheader("🎼 Phong cách âm nhạc")
@@ -795,6 +815,8 @@ with st.sidebar:
                 st.info("Không thể tải lịch sử.")
     st.divider()
     generate_btn = st.button("🚀 Bắt đầu sản xuất", use_container_width=True, type="primary")
+
+api_key = st.session_state.get("anthropic_api_key", "")
 
 # ---------------------------------------------------------------------------
 # JSON parser

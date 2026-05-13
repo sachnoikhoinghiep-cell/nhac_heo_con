@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import urllib.parse
 import os
+import json
 from firebase_admin import auth, firestore as fs
 from firebase_config import init_firebase
 from datetime import datetime, timezone, timedelta
@@ -33,6 +34,32 @@ def _clear_rt():
         _cookie_mgr().delete(_COOKIE_KEY)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# API key persistence
+# ---------------------------------------------------------------------------
+_APIKEY_COOKIE = "nhacheocon_ak"
+
+def save_api_keys(anthropic: str, google: str, suno: str):
+    data = json.dumps({"a": anthropic, "g": google, "s": suno})
+    try:
+        _cookie_mgr().set(
+            _APIKEY_COOKIE, data,
+            expires_at=datetime.now() + timedelta(days=365),
+        )
+    except Exception:
+        pass
+
+def load_api_keys() -> dict:
+    try:
+        raw = _cookie_mgr().get(_APIKEY_COOKIE) or ""
+        if raw:
+            d = json.loads(raw)
+            return {"anthropic": d.get("a", ""), "google": d.get("g", ""), "suno": d.get("s", "")}
+    except Exception:
+        pass
+    return {}
 
 PLAN_DURATION = {
     "Ngày":  timedelta(days=1),
