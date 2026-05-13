@@ -50,26 +50,37 @@ def _build_google_auth_url() -> str:
 
 
 def render_google_signin_button():
-    """Render nút Google Sign-In dưới dạng thẻ <a> thật — click trực tiếp điều hướng trình duyệt."""
+    """
+    Nút Google Sign-In nằm trong components.html — user click trực tiếp vào button trong component
+    nên sandbox cho phép window.top.location.href (allow-top-navigation-by-user-activation).
+    """
     if not _google_client_id():
         st.info("💡 Thêm `GOOGLE_CLIENT_ID` và `REDIRECT_URI` vào Streamlit secrets để bật Google Sign-In.")
         return
 
     auth_url = _build_google_auth_url()
-    st.markdown(
+    components.html(
         f"""
-        <a href="{auth_url}" target="_top" style="
-            display:flex; align-items:center; justify-content:center; gap:10px;
-            width:100%; padding:11px 0; margin-bottom:4px;
-            background:#fff; border:1.5px solid #dadce0; border-radius:8px;
-            font-size:15px; font-weight:600; color:#3c4043;
-            text-decoration:none; box-shadow:0 1px 3px rgba(0,0,0,.12);
-        ">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20"/>
-            Đăng nhập bằng Google
-        </a>
+        <style>
+          * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+          body {{ background: transparent; font-family: 'Google Sans', Roboto, sans-serif; }}
+          button {{
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 11px 16px;
+            background: #fff; border: 1.5px solid #dadce0; border-radius: 8px;
+            font-size: 15px; font-weight: 600; color: #3c4043; cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,.12); transition: background .15s;
+          }}
+          button:hover {{ background: #f8f9fa; box-shadow: 0 2px 6px rgba(0,0,0,.18); }}
+          button:active {{ background: #f1f3f4; }}
+          img {{ width: 20px; height: 20px; }}
+        </style>
+        <button onclick="window.top.location.href='{auth_url}'">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>
+          Đăng nhập bằng Google
+        </button>
         """,
-        unsafe_allow_html=True,
+        height=54,
     )
 
 
