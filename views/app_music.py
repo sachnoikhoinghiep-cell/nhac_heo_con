@@ -511,9 +511,10 @@ def run_suno_generation(title: str, style: str, lyrics: str, track_key: str):
         info_slot.error(f"❌ {e}")
 
 
-def generate_all_tracks(tracks: list):
+def generate_all_tracks(items: list, max_workers: int = 5):
     """
-    Pha 1: Submit tất cả tasks song song qua ThreadPoolExecutor (không update UI từ thread).
+    items: list of (title, style, lyrics, track_key).
+    Pha 1: Submit song song qua ThreadPoolExecutor (không update UI từ thread).
     Pha 2: Poll toàn bộ tasks từ main thread mỗi 8s — cập nhật progress + log an toàn.
     Pha 3: Download MP3 song song sau khi SUCCESS.
     """
@@ -525,10 +526,7 @@ def generate_all_tracks(tracks: list):
         st.warning("Nhập Suno API Key ở sidebar.")
         return
 
-    n     = len(tracks)
-    items = [(t.get("title", f"Track {i+1}"), t.get("music_style",""), t.get("lyrics",""), f"track_{i+1}")
-             for i, t in enumerate(tracks)]
-
+    n        = len(items)
     bar      = st.progress(0.0, text=f"📤 Đang submit {n} tracks lên Suno…")
     log_slot = st.empty()
     statuses = {tk: "queued" for _, _, _, tk in items}
@@ -551,7 +549,8 @@ def generate_all_tracks(tracks: list):
 
     task_map   = {}   # tk -> task_id
     submit_ok  = 0
-    with ThreadPoolExecutor(max_workers=min(n, MAX_SUNO_WORKERS)) as ex:
+    _workers   = min(n, max_workers, MAX_SUNO_WORKERS)
+    with ThreadPoolExecutor(max_workers=_workers) as ex:
         futs = {ex.submit(_submit, it): it for it in items}
         for f in _as_completed(futs):
             tk, tid, err = f.result()
@@ -616,7 +615,7 @@ def generate_all_tracks(tracks: list):
         return results
 
     if suno_data_map:
-        with ThreadPoolExecutor(max_workers=min(len(suno_data_map), MAX_SUNO_WORKERS)) as ex:
+        with ThreadPoolExecutor(max_workers=min(len(suno_data_map), max_workers, MAX_SUNO_WORKERS)) as ex:
             dl_results = list(ex.map(_download, suno_data_map.items()))
         # Ghi vào session_state từ main thread (thread-safe)
         for d in dl_results:
@@ -950,25 +949,55 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
             st.subheader(f"💽 Album: {data.get('title', topic)}")
             tracks = data.get("tracks", [])
             if tracks:
-                col_hdr, col_all = st.columns([2, 1])
-                col_hdr.markdown(f"**{len(tracks)} tracks — Click để xem lyrics & tạo nhạc:**")
-                if col_all.button("🚀 Tạo tất cả nhạc", key="gen_all", type="primary", use_container_width=True):
-                    generate_all_tracks([t for t in tracks if isinstance(t, dict)])
+                # ── Controls ──────────────────────────────────────────────
+                ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2.5, 1, 1, 1.5])
+                ctrl1.markdown(f"**{len(tracks)} tracks — Tích chọn rồi bấm Gửi:**")
+                num_streams = int(ctrl4.number_input(
+                    "Luồng song song:", min_value=1, max_value=15, value=5,
+                    key="suno_streams",
+                ))
+                if ctrl2.button("☑ Tất cả", use_container_width=True, key="sel_all_btn"):
+                    for _j in range(1, len(tracks) + 1):
+                        st.session_state[f"chk_{_j}"] = True
+                    st.rerun()
+                if ctrl3.button("☐ Bỏ tất", use_container_width=True, key="sel_none_btn"):
+                    for _j in range(1, len(tracks) + 1):
+                        st.session_state[f"chk_{_j}"] = False
+                    st.rerun()
+
+                # ── Track list: checkbox column + expander column ──────────
                 for i, t in enumerate(tracks, 1):
                     if isinstance(t, dict):
-                        label = f"🎵 Track {i}: {t.get('title', f'Track {i}')}"
-                        with st.expander(label, expanded=False):
-                            style = t.get("music_style", "")
-                            lyrics = t.get("lyrics", "")
-                            if style:
-                                st.info(f"**Style / Tags:** {style}")
-                            if lyrics:
-                                with st.expander("📝 Lyrics", expanded=False):
-                                    st.write(lyrics)
-                            st.divider()
-                            music_widget(t.get("title", f"Track {i}"), style, lyrics, f"track_{i}")
+                        chk_col, exp_col = st.columns([0.05, 0.95])
+                        chk_col.checkbox("", key=f"chk_{i}", label_visibility="collapsed")
+                        with exp_col:
+                            with st.expander(f"🎵 Track {i}: {t.get('title', f'Track {i}')}", expanded=False):
+                                style = t.get("music_style", "")
+                                lyrics = t.get("lyrics", "")
+                                if style:
+                                    st.info(f"**Style / Tags:** {style}")
+                                if lyrics:
+                                    with st.expander("📝 Lyrics", expanded=False):
+                                        st.write(lyrics)
+                                st.divider()
+                                music_widget(t.get("title", f"Track {i}"), style, lyrics, f"track_{i}")
                     else:
                         st.markdown(f"{i}. {t}")
+
+                # ── Send button ────────────────────────────────────────────
+                selected_items = [
+                    (t.get("title", f"Track {i}"), t.get("music_style", ""), t.get("lyrics", ""), f"track_{i}")
+                    for i, t in enumerate(tracks, 1)
+                    if isinstance(t, dict) and st.session_state.get(f"chk_{i}", False)
+                ]
+                n_sel = len(selected_items)
+                btn_label = (
+                    f"🚀 Gửi {n_sel} bài đã chọn • {num_streams} luồng"
+                    if n_sel else "🚀 Chưa chọn bài nào"
+                )
+                if st.button(btn_label, key="gen_selected", type="primary",
+                             use_container_width=True, disabled=(n_sel == 0)):
+                    generate_all_tracks(selected_items, max_workers=num_streams)
 
     # ── Cột phải: hình ảnh & SEO ───────────────────────────────────────────
     with col2:
