@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import requests
 import urllib.parse
 import os
@@ -14,124 +13,97 @@ PLAN_DURATION = {
     "Năm":   timedelta(days=365),
 }
 
-# Firebase REST API key (public — dùng cho client-side auth)
 FIREBASE_API_KEY = "AIzaSyBl3BYwj_E3v4ppfFUHXY1WpWx7r_6H5bA"
 FIREBASE_REST    = "https://identitytoolkit.googleapis.com/v1/accounts"
 
+
 def _google_client_id() -> str:
-    """Đọc Google OAuth Web Client ID từ secrets hoặc env."""
-    try:
-        return st.secrets["GOOGLE_CLIENT_ID"]
-    except Exception:
-        return os.environ.get("GOOGLE_CLIENT_ID", "")
+    try:    return st.secrets["GOOGLE_CLIENT_ID"]
+    except Exception: return os.environ.get("GOOGLE_CLIENT_ID", "")
+
+def _google_client_secret() -> str:
+    try:    return st.secrets["GOOGLE_CLIENT_SECRET"]
+    except Exception: return os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
 def _redirect_uri() -> str:
-    """URL callback sau khi Google xác thực — phải khớp với cấu hình OAuth."""
-    try:
-        return st.secrets["REDIRECT_URI"]
-    except Exception:
-        return os.environ.get("REDIRECT_URI", "http://localhost:8501")
+    try:    return st.secrets["REDIRECT_URI"].rstrip("/")
+    except Exception: return os.environ.get("REDIRECT_URI", "http://localhost:8501")
 
 
 # ---------------------------------------------------------------------------
-# Google OAuth 2.0 — Implicit flow (redirect window.top, bypass iframe sandbox)
+# Google OAuth — Authorization Code flow (query param, Python-readable)
 # ---------------------------------------------------------------------------
 def _build_google_auth_url() -> str:
-    client_id    = _google_client_id()
-    redirect_uri = _redirect_uri()
     return (
         "https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={urllib.parse.quote(client_id)}"
-        f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
-        "&response_type=token"
+        f"?client_id={urllib.parse.quote(_google_client_id())}"
+        f"&redirect_uri={urllib.parse.quote(_redirect_uri())}"
+        "&response_type=code"
         "&scope=openid%20email%20profile"
         "&prompt=select_account"
+        "&access_type=online"
     )
 
 
-def render_google_signin_button():
-    """
-    Nút Google Sign-In nằm trong components.html — user click trực tiếp vào button trong component
-    nên sandbox cho phép window.top.location.href (allow-top-navigation-by-user-activation).
-    """
-    if not _google_client_id():
-        st.info("💡 Thêm `GOOGLE_CLIENT_ID` và `REDIRECT_URI` vào Streamlit secrets để bật Google Sign-In.")
-        return
-
-    auth_url = _build_google_auth_url()
-    components.html(
-        f"""
-        <style>
-          * {{ box-sizing:border-box; margin:0; padding:0; }}
-          body {{ background:transparent; font-family:sans-serif; }}
-          a {{
-            display:flex; align-items:center; justify-content:center; gap:10px;
-            width:100%; padding:11px 16px;
-            background:#fff; border:1.5px solid #dadce0; border-radius:8px;
-            font-size:15px; font-weight:600; color:#3c4043;
-            text-decoration:none; cursor:pointer;
-            box-shadow:0 1px 3px rgba(0,0,0,.12);
-          }}
-          a:hover {{ background:#f8f9fa; }}
-          a:active {{ background:#f1f3f4; }}
-          img {{ width:20px; height:20px; flex-shrink:0; }}
-        </style>
-        <a href="{auth_url}" target="_top">
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>
-          Đăng nhập bằng Google
-        </a>
-        """,
-        height=54,
-    )
-
-
-def handle_google_hash_fragment():
-    """
-    Đọc #access_token từ URL hash (Google trả về sau OAuth) và chuyển sang query param.
-    Phải render trên mỗi lần load trang để bắt được callback.
-    """
-    components.html("""
-    <script>
-    (function() {
-        const hash = window.parent.location.hash;
-        if (!hash || !hash.includes('access_token')) return;
-        const params = new URLSearchParams(hash.slice(1));
-        const token  = params.get('access_token');
-        if (!token) return;
-        // Xóa hash, thêm token vào query string để Python đọc được
-        const url = new URL(window.parent.location.href);
-        url.hash = '';
-        url.searchParams.set('google_access_token', token);
-        window.parent.location.replace(url.toString());
-    })();
-    </script>
-    """, height=0)
-
-
-def firebase_signin_with_google(access_token: str) -> str:
-    """Đổi Google access token lấy Firebase ID token qua signInWithIdp."""
-    redirect_uri = _redirect_uri()
+def exchange_google_code(code: str) -> str:
+    """Đổi authorization code → Google tokens → Firebase ID token."""
+    # Bước 1: đổi code lấy Google token
     resp = requests.post(
-        f"{FIREBASE_REST}:signInWithIdp?key={FIREBASE_API_KEY}",
-        json={
-            "postBody":             f"access_token={access_token}&providerId=google.com",
-            "requestUri":           redirect_uri,
-            "returnIdpCredential":  True,
-            "returnSecureToken":    True,
+        "https://oauth2.googleapis.com/token",
+        data={
+            "code":          code,
+            "client_id":     _google_client_id(),
+            "client_secret": _google_client_secret(),
+            "redirect_uri":  _redirect_uri(),
+            "grant_type":    "authorization_code",
         },
         timeout=10,
     )
-    data = resp.json()
-    if "error" in data:
-        raise ValueError(data["error"]["message"])
-    return data["idToken"]
+    token_data = resp.json()
+    if "error" in token_data:
+        raise ValueError(token_data.get("error_description", token_data["error"]))
+
+    access_token = token_data.get("access_token", "")
+    id_token     = token_data.get("id_token", "")
+
+    # Bước 2: đổi Google token lấy Firebase ID token
+    post_body = f"access_token={access_token}&providerId=google.com"
+    if id_token:
+        post_body = f"id_token={id_token}&access_token={access_token}&providerId=google.com"
+
+    resp2 = requests.post(
+        f"{FIREBASE_REST}:signInWithIdp?key={FIREBASE_API_KEY}",
+        json={
+            "postBody":            post_body,
+            "requestUri":          _redirect_uri(),
+            "returnIdpCredential": True,
+            "returnSecureToken":   True,
+        },
+        timeout=10,
+    )
+    data2 = resp2.json()
+    if "error" in data2:
+        raise ValueError(data2["error"]["message"])
+    return data2["idToken"]
+
+
+def render_google_signin_button():
+    """Nút Google Sign-In dùng st.link_button — không iframe, không sandbox."""
+    if not _google_client_id() or not _google_client_secret():
+        st.info("💡 Thêm `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `REDIRECT_URI` vào Streamlit secrets.")
+        return
+    auth_url = _build_google_auth_url()
+    st.link_button(
+        "🔵  Đăng nhập bằng Google",
+        auth_url,
+        use_container_width=True,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Firebase REST API — Email/Password (không dùng JS SDK, không lỗi iframe)
+# Firebase REST — Email/Password
 # ---------------------------------------------------------------------------
 def firebase_email_login(email: str, password: str) -> str:
-    """Đăng nhập, trả về idToken."""
     resp = requests.post(
         f"{FIREBASE_REST}:signInWithPassword?key={FIREBASE_API_KEY}",
         json={"email": email, "password": password, "returnSecureToken": True},
@@ -151,7 +123,6 @@ def firebase_email_login(email: str, password: str) -> str:
 
 
 def firebase_email_register(email: str, password: str) -> str:
-    """Đăng ký tài khoản mới, trả về idToken."""
     resp = requests.post(
         f"{FIREBASE_REST}:signUp?key={FIREBASE_API_KEY}",
         json={"email": email, "password": password, "returnSecureToken": True},
@@ -161,16 +132,15 @@ def firebase_email_register(email: str, password: str) -> str:
     if "error" in data:
         msg = data["error"]["message"]
         friendly = {
-            "EMAIL_EXISTS":              "Email này đã được đăng ký.",
-            "WEAK_PASSWORD":             "Mật khẩu phải có ít nhất 6 ký tự.",
-            "INVALID_EMAIL":             "Địa chỉ email không hợp lệ.",
+            "EMAIL_EXISTS":  "Email này đã được đăng ký.",
+            "WEAK_PASSWORD": "Mật khẩu phải có ít nhất 6 ký tự.",
+            "INVALID_EMAIL": "Địa chỉ email không hợp lệ.",
         }
         raise ValueError(friendly.get(msg, msg))
     return data["idToken"]
 
 
 def firebase_reset_password(email: str):
-    """Gửi email đặt lại mật khẩu."""
     resp = requests.post(
         f"{FIREBASE_REST}:sendOobCode?key={FIREBASE_API_KEY}",
         json={"requestType": "PASSWORD_RESET", "email": email},
@@ -182,33 +152,32 @@ def firebase_reset_password(email: str):
 
 
 # ---------------------------------------------------------------------------
-# Streamlit login / register UI
+# Auth UI
 # ---------------------------------------------------------------------------
 def show_auth_ui():
-    """Hiển thị form đăng nhập / đăng ký — không dùng iframe, không lỗi môi trường."""
     st.markdown("### 👤 Đăng nhập để tiếp tục")
 
-    # ── Bắt callback Google OAuth (access_token trong URL hash → query param) ──
-    handle_google_hash_fragment()
-    g_token = st.query_params.get("google_access_token")
-    if g_token:
+    # ── Xử lý callback Google OAuth (?code=...) ────────────────────────────
+    google_code = st.query_params.get("code")
+    if google_code and not st.session_state.get("user"):
         st.query_params.clear()
-        with st.spinner("Đang xác thực Google…"):
+        with st.spinner("Đang xác thực với Google…"):
             try:
-                id_token = firebase_signin_with_google(g_token)
-                user     = verify_and_load_user(id_token)
+                firebase_token = exchange_google_code(google_code)
+                user = verify_and_load_user(firebase_token)
                 if user:
                     st.session_state.user = user
                     st.rerun()
                 else:
-                    st.error("Không thể xác thực. Thử lại.")
+                    st.error("Không thể xác thực tài khoản. Thử lại.")
             except Exception as e:
                 st.error(f"Lỗi Google Sign-In: {e}")
 
-    # ── Nút Google Sign-In (anchor tag thật, không qua iframe) ─────────────
+    # ── Nút Google (dùng st.link_button — không cần iframe) ────────────────
     render_google_signin_button()
     st.divider()
 
+    # ── Form email/password ─────────────────────────────────────────────────
     tab_login, tab_register = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký"])
 
     with tab_login:
@@ -227,8 +196,6 @@ def show_auth_ui():
                     if user:
                         st.session_state.user = user
                         st.rerun()
-                    else:
-                        st.error("Không thể xác thực tài khoản. Thử lại.")
                 except ValueError as e:
                     st.error(str(e))
 
@@ -258,7 +225,6 @@ def show_auth_ui():
                 with st.spinner("Đang tạo tài khoản…"):
                     try:
                         token = firebase_email_register(r_email, r_password)
-                        # Cập nhật displayName sau khi đăng ký
                         try:
                             fb_user = auth.get_user_by_email(r_email)
                             auth.update_user(fb_user.uid, display_name=r_name)
@@ -273,10 +239,9 @@ def show_auth_ui():
 
 
 # ---------------------------------------------------------------------------
-# Token verification & user loading
+# Token verification & Firestore
 # ---------------------------------------------------------------------------
 def verify_and_load_user(token: str, email: str = "", name: str = "", photo: str = "") -> dict | None:
-    """Xác minh Firebase ID token, tạo/load user trên Firestore."""
     db = init_firebase()
     try:
         decoded = auth.verify_id_token(token)
@@ -294,13 +259,8 @@ def verify_and_load_user(token: str, email: str = "", name: str = "", photo: str
 
     if not doc.exists:
         user_ref.set({
-            "email":      email,
-            "name":       name,
-            "photo_url":  photo,
-            "created_at": now,
-            "plan":       None,
-            "is_paid":    False,
-            "expires_at": None,
+            "email": email, "name": name, "photo_url": photo,
+            "created_at": now, "plan": None, "is_paid": False, "expires_at": None,
         })
         return {"uid": uid, "email": email, "name": name, "photo": photo,
                 "is_paid": False, "plan": None}
@@ -313,14 +273,13 @@ def verify_and_load_user(token: str, email: str = "", name: str = "", photo: str
         user_ref.update({"is_paid": False})
         is_paid = False
 
-    # Cập nhật name nếu lần đầu đăng ký có tên
     if name and not data.get("name"):
         user_ref.update({"name": name})
 
     return {
         "uid":     uid,
         "email":   email or data.get("email", ""),
-        "name":    name  or data.get("name", email.split("@")[0]),
+        "name":    name  or data.get("name", email.split("@")[0] if email else "User"),
         "photo":   photo or data.get("photo_url", ""),
         "is_paid": is_paid,
         "plan":    data.get("plan"),
@@ -328,31 +287,22 @@ def verify_and_load_user(token: str, email: str = "", name: str = "", photo: str
 
 
 # ---------------------------------------------------------------------------
-# Activate plan after payment
+# Activate plan / History / Sign-out
 # ---------------------------------------------------------------------------
 def activate_plan(uid: str, plan: str):
     db      = init_firebase()
     now     = datetime.now(timezone.utc)
     expires = now + PLAN_DURATION[plan]
     db.collection("users").document(uid).update({
-        "is_paid":    True,
-        "plan":       plan,
-        "paid_at":    now,
-        "expires_at": expires,
+        "is_paid": True, "plan": plan, "paid_at": now, "expires_at": expires,
     })
 
 
-# ---------------------------------------------------------------------------
-# Music history
-# ---------------------------------------------------------------------------
 def save_music_history(uid: str, topic: str, genre: str, num_tracks: int, result: dict):
     db = init_firebase()
     db.collection("users").document(uid).collection("music_history").add({
-        "topic":      topic,
-        "genre":      genre,
-        "num_tracks": num_tracks,
-        "created_at": datetime.now(timezone.utc),
-        "result":     result,
+        "topic": topic, "genre": genre, "num_tracks": num_tracks,
+        "created_at": datetime.now(timezone.utc), "result": result,
     })
 
 
@@ -362,15 +312,11 @@ def get_music_history(uid: str) -> list:
         db.collection("users").document(uid)
           .collection("music_history")
           .order_by("created_at", direction=fs.Query.DESCENDING)
-          .limit(20)
-          .stream()
+          .limit(20).stream()
     )
     return [{"id": d.id, **d.to_dict()} for d in docs]
 
 
-# ---------------------------------------------------------------------------
-# Sign-out
-# ---------------------------------------------------------------------------
 def sign_out():
     st.session_state.user = None
     st.rerun()
