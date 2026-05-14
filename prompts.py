@@ -177,6 +177,34 @@ Generate the album title, tracks {batch_start}–{batch_end} with full lyrics, v
 Return the ALBUM FIRST BATCH format JSON with exactly {batch_end - batch_start + 1} tracks in the "tracks" array.
 """
 
+def build_keyword_prompt(genre: str, language: str, niche: str, today: str) -> str:
+    niche_line = f"Niche / sub-topic: {niche}" if niche.strip() else ""
+    return f"""You are a YouTube SEO expert specializing in {genre} music content.
+Today: {today}. Target market language: {language}.
+{niche_line}
+
+Analyze current YouTube search trends for {genre} music videos in the {language} market.
+Consider: current season, upcoming events, evergreen topics, competitor titles, search intent.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{{
+  "hot_keywords": ["keyword 1", "keyword 2", ...],
+  "long_tail": ["longer search phrase 1", ...],
+  "hashtags": ["#tag1", "#tag2", ...],
+  "title_templates": ["Template Title with {{KEYWORD}} – 2026", ...],
+  "tips": ["Specific SEO tip 1", "Specific SEO tip 2", "Specific SEO tip 3"]
+}}
+
+Rules:
+- hot_keywords: exactly 12 short keywords (1-4 words), high search volume, specific to genre + market
+- long_tail: exactly 8 phrases (5-10 words), lower competition, high intent
+- hashtags: exactly 15 hashtags, mix of broad + niche, no spaces, include language-specific ones
+- title_templates: exactly 5 YouTube title templates, use {{KEYWORD}} as placeholder, include BPM or year for music content
+- tips: exactly 3 actionable SEO tips tailored to {genre} + {language} market
+- All text in {language} (hashtags can mix English + {language})
+"""
+
+
 def build_video_script_prompt(
     title: str,
     topic: str,

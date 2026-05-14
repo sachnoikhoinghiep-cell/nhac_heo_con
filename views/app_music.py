@@ -17,6 +17,7 @@ from prompts import (
     build_album_first_batch_prompt,
     build_album_continuation_prompt,
     build_video_script_prompt,
+    build_keyword_prompt,
 )
 
 # ---------------------------------------------------------------------------
@@ -156,6 +157,7 @@ for _k, _v in {
     "suno_audio": {},
     "suno_failed": {},        # track_key -> error message
     "video_scripts": {},      # track_key -> script text
+    "keyword_result": None,   # trending keyword lookup result
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -1335,6 +1337,81 @@ if generate_btn:
             st.error("Anthropic API Key không hợp lệ.")
         except anthropic.APIError as e:
             st.error(f"Lỗi Anthropic API: {e}")
+
+# ---------------------------------------------------------------------------
+# Trending Keywords tool (độc lập với music generation)
+# ---------------------------------------------------------------------------
+with st.expander("📈 Trending YouTube Keywords", expanded=False):
+    kc1, kc2 = st.columns(2)
+    kw_genre = kc1.selectbox("Thể loại:", GENRE_NAMES,
+                              index=GENRE_NAMES.index(st.session_state.get("music_genre", GENRE_NAMES[0]))
+                              if st.session_state.get("music_genre") in GENRE_NAMES else 0,
+                              key="kw_genre")
+    kw_lang  = kc2.selectbox("Thị trường:", ["Tiếng Việt", "English", "Japanese"],
+                              index=["Tiếng Việt", "English", "Japanese"].index(
+                                  st.session_state.get("language_select", "Tiếng Việt"))
+                              if st.session_state.get("language_select") in ["Tiếng Việt", "English", "Japanese"] else 0,
+                              key="kw_lang")
+    kw_niche = st.text_input("Niche / chủ đề thêm (tùy chọn):",
+                             placeholder="Ví dụ: nhạc thiếu nhi ru ngủ, nhạc gym 2026…",
+                             key="kw_niche")
+
+    if st.button("🔍 Tra cứu Trending Keywords", use_container_width=True, key="kw_search_btn"):
+        _kw_api = st.session_state.get("anthropic_api_key", "").strip()
+        if not _kw_api:
+            st.warning("Nhập Anthropic API Key ở sidebar để dùng tính năng này.")
+        else:
+            with st.spinner("Claude đang phân tích trending keywords…"):
+                try:
+                    _kw_prompt = build_keyword_prompt(
+                        kw_genre, kw_lang, kw_niche, date.today().strftime("%B %d, %Y")
+                    )
+                    _kw_client = anthropic.Anthropic(api_key=_kw_api)
+                    _kw_msg = _kw_client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=1024,
+                        messages=[{"role": "user", "content": _kw_prompt}],
+                    )
+                    st.session_state.keyword_result = json.loads(
+                        _fix_control_chars(_kw_msg.content[0].text.strip())
+                    )
+                except Exception as _kw_e:
+                    st.error(f"Lỗi tra cứu: {_kw_e}")
+
+    kw = st.session_state.keyword_result
+    if kw:
+        kt1, kt2, kt3, kt4 = st.tabs(["🔥 Hot Keywords", "📌 Long-tail", "🏷️ Hashtags", "📝 Tiêu đề mẫu"])
+
+        with kt1:
+            hot = kw.get("hot_keywords", [])
+            cols = st.columns(3)
+            for idx, kw_item in enumerate(hot):
+                cols[idx % 3].markdown(f"`{kw_item}`")
+            tips = kw.get("tips", [])
+            if tips:
+                st.divider()
+                st.markdown("**💡 SEO Tips:**")
+                for tip in tips:
+                    st.markdown(f"- {tip}")
+
+        with kt2:
+            for phrase in kw.get("long_tail", []):
+                st.markdown(f"- `{phrase}`")
+
+        with kt3:
+            tags = kw.get("hashtags", [])
+            st.markdown(" ".join(f"`{t}`" for t in tags))
+            if tags:
+                st.code(" ".join(tags), language="text")
+
+        with kt4:
+            for tpl in kw.get("title_templates", []):
+                st.markdown(f"- {tpl}")
+
+        if st.button("🗑️ Xóa kết quả", key="kw_clear_btn"):
+            st.session_state.keyword_result = None
+            st.rerun()
+
 
 if st.session_state.music_result:
     result = st.session_state.music_result
