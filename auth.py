@@ -346,14 +346,29 @@ def activate_plan(uid: str, plan: str):
     })
 
 
-def save_music_history(uid: str, topic: str, genre: str, num_tracks: int, result: dict):
+def save_music_history(uid: str, topic: str, genre: str, num_tracks: int,
+                       result: dict, create_mv: bool = False) -> str:
+    """Save generation to Firestore. Returns doc_id for later Suno updates."""
     db  = init_firebase()
     now = datetime.now(timezone.utc)
-    db.collection("users").document(uid).collection("music_history").add({
+    _, doc_ref = db.collection("users").document(uid).collection("music_history").add({
         "topic": topic, "genre": genre, "num_tracks": num_tracks,
+        "create_mv": create_mv,
         "created_at": now,
         "expire_at":  now + timedelta(hours=72),
         "result": result,
+        "suno_results": {},   # filled in later by update_history_suno
+    })
+    return doc_ref.id
+
+
+def update_history_suno(uid: str, doc_id: str, suno_results: dict):
+    """Patch a history doc with Suno audio URLs after generation completes."""
+    if not doc_id:
+        return
+    db = init_firebase()
+    db.collection("users").document(uid).collection("music_history").document(doc_id).update({
+        "suno_results": suno_results,
     })
 
 

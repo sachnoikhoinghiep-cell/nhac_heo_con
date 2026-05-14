@@ -5,6 +5,7 @@ from auth import (
     activate_plan, save_music_history, get_music_history, sign_out,
     save_api_keys, load_api_keys,
     save_presets, load_presets,
+    update_history_suno,
 )
 import requests
 import json
@@ -159,6 +160,7 @@ for _k, _v in {
     "suno_failed": {},        # track_key -> error message
     "video_scripts": {},      # track_key -> script text
     "keyword_result": None,   # trending keyword lookup result
+    "current_history_id": None,  # Firestore doc id for Suno URL updates
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -590,6 +592,7 @@ def run_suno_generation(title: str, style: str, lyrics: str, track_key: str):
             suno_list = suno_poll_with_ui(suno_key, task_id, bar, preview_slot)
 
             st.session_state.suno_tracks[track_key] = suno_list
+            _persist_suno_to_history()
             bar_slot.progress(1.0, text="✅ 100% — Đang tải MP3 full track…")
 
             for vi, track in enumerate(suno_list):
@@ -732,7 +735,26 @@ def generate_all_tracks(items: list, max_workers: int = 5):
 
     bar.progress(1.0, text=f"✅ Xong {len(completed)}/{n} tracks!")
     _render_log()
+    _persist_suno_to_history()
     st.rerun()
+
+
+def _persist_suno_to_history():
+    """Save current suno_tracks URLs to the active Firestore history doc."""
+    user    = st.session_state.get("user")
+    hist_id = st.session_state.get("current_history_id")
+    if not user or not hist_id or not st.session_state.suno_tracks:
+        return
+    slim = {
+        tk: [{"audioUrl": t.get("audioUrl", ""), "streamAudioUrl": t.get("streamAudioUrl", ""),
+               "duration": t.get("duration", 0), "id": t.get("id", "")}
+             for t in tracks]
+        for tk, tracks in st.session_state.suno_tracks.items()
+    }
+    try:
+        update_history_suno(user["uid"], hist_id, slim)
+    except Exception:
+        pass
 
 
 def generate_video_script(title: str, style: str, lyrics: str, track_key: str):
@@ -1033,16 +1055,47 @@ with st.sidebar:
 
     st.divider()
     if st.session_state.user:
-        with st.expander("🕘 Lịch sử tạo nhạc (20 gần nhất)", expanded=False):
+        with st.expander("🕘 Lịch sử (72h gần nhất)", expanded=False):
             try:
                 history = get_music_history(st.session_state.user["uid"])
-                if history:
-                    for h in history:
-                        ts = h.get("created_at")
-                        ts_str = ts.strftime("%d/%m %H:%M") if ts else ""
-                        st.caption(f"🎵 {h.get('topic','')} — {h.get('genre','')} — {h.get('num_tracks','')} bài  `{ts_str}`")
-                else:
+                if not history:
                     st.info("Chưa có lịch sử tạo nhạc.")
+                for _h in history:
+                    _ts     = _h.get("created_at")
+                    _ts_str = _ts.strftime("%d/%m %H:%M") if _ts else ""
+                    _n_suno = len(_h.get("suno_results", {}))
+                    _badge  = f" 🎵{_n_suno}" if _n_suno else ""
+                    _label  = f"{_h.get('topic','')[:22]}{_badge} · {_ts_str}"
+                    with st.expander(_label, expanded=False):
+                        st.caption(f"**{_h.get('genre','')}** · {_h.get('num_tracks','')} bài")
+                        # Track list preview from Claude result
+                        _res = _h.get("result", {})
+                        _tlist = _res.get("tracks", [])
+                        if _tlist:
+                            for _t in _tlist[:6]:
+                                if isinstance(_t, dict):
+                                    st.caption(f"• {_t.get('title','')}")
+                            if len(_tlist) > 6:
+                                st.caption(f"  …+{len(_tlist)-6} bài")
+                        elif _res.get("title"):
+                            st.caption(f"Single: {_res['title']}")
+                        # Restore button
+                        if st.button("🔄 Khôi phục", key=f"hr_{_h['id']}",
+                                     use_container_width=True, type="primary"):
+                            st.session_state.music_result = _res
+                            st.session_state.music_meta   = {
+                                "topic":       _h.get("topic", ""),
+                                "num_tracks":  _h.get("num_tracks", 1),
+                                "create_mv":   _h.get("create_mv", False),
+                                "music_genre": _h.get("genre", "Thiếu Nhi (Nursery)"),
+                            }
+                            _suno = _h.get("suno_results", {})
+                            if _suno:
+                                st.session_state.suno_tracks  = _suno
+                                st.session_state.suno_audio   = {}
+                                st.session_state.suno_failed  = {}
+                            st.session_state.current_history_id = _h["id"]
+                            st.rerun()
             except Exception:
                 st.info("Không thể tải lịch sử.")
     st.divider()
@@ -1359,10 +1412,11 @@ if generate_btn:
             # Lưu lịch sử vào Firestore
             if st.session_state.user:
                 try:
-                    save_music_history(
+                    _hist_id = save_music_history(
                         st.session_state.user["uid"],
-                        topic, music_genre, num_tracks, result,
+                        topic, music_genre, num_tracks, result, create_mv,
                     )
+                    st.session_state.current_history_id = _hist_id
                 except Exception:
                     pass
             # Reset images & audio khi tạo plan mới
