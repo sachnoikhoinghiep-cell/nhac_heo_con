@@ -1570,7 +1570,9 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
 if st.session_state.music_result:
     result = st.session_state.music_result
     meta = st.session_state.music_meta
-    st.success(f"✅ Đã hoàn thành kế hoạch sản xuất cho: **{meta['topic']}**")
+    _proj_label = meta.get("project_name") or result.get("title") or meta["topic"]
+    _topic_suffix = f"  ·  chủ đề: _{meta['topic']}_" if _proj_label != meta["topic"] else ""
+    st.success(f"✅ Project: **{_proj_label}**{_topic_suffix}")
     render_results(result, meta["num_tracks"], meta["topic"], meta["create_mv"], meta.get("music_genre", "Thiếu Nhi (Nursery)"))
 
     st.divider()
