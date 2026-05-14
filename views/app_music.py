@@ -238,6 +238,101 @@ GENRE_CONFIG = {
         "visual_vibe": "Defqon.1 festival mainstage style, massive outdoor stage with towering fire pillars and pyrotechnic explosions, armored futuristic warrior characters in battle stance, crowd of thousands with raised fists, epic orange and gold flame lighting against dark night sky, cinematic wide-angle aerial shot",
         "hashtags": "#hardstyle #euphorichardstyle #hardcore #gymmotivation #workoutmusic #defqon1",
     },
+    # ── Chill / Mood ──────────────────────────────────────────────────────────
+    "Lofi Hip-Hop": {
+        "bpm": "70-90 BPM",
+        "style_tags": "Lo-fi, Jazzy Chords, Vinyl Crackle, Mellow, Study Beats, Soft Drums",
+        "visual_vibe": "Cozy anime bedroom at night, warm lamp glow on desk with books and coffee cup, rain on window, city skyline glowing softly outside, grain film texture overlay, muted warm brown and amber palette",
+        "hashtags": "#lofi #studybeats #chilledcow #lofihiphop #studywithme #nhaclofi",
+    },
+    "Synthwave / Retrowave": {
+        "bpm": "100-118 BPM",
+        "style_tags": "Analog Synth, Retro 80s, Arpeggiated Lead, Gated Reverb Drums, Nostalgic, Dreamy",
+        "visual_vibe": "80s retro synthwave aesthetic, neon pink and electric blue grid horizon stretching to infinity, chrome DeLorean silhouette, giant glowing sun setting behind mountain range, palm tree silhouettes, VHS distortion scanlines, ultra-cinematic widescreen",
+        "hashtags": "#synthwave #retrowave #outrun #80svibes #neonlights #vaporwave",
+    },
+    "Chillout / Ambient": {
+        "bpm": "60-80 BPM",
+        "style_tags": "Atmospheric Pads, Slow Tempo, Ethereal, Calm, Meditative, Nature Sounds",
+        "visual_vibe": "Aerial view of misty mountain valley at golden hour, wispy clouds drifting through ancient cedar forest, soft diffused light rays, ultra-serene minimal composition, muted green and gold palette, cinematic 2.39:1 aspect",
+        "hashtags": "#chillout #ambient #relaxingmusic #nhacthugian #meditation #deeprelax",
+    },
+    "Future Bass": {
+        "bpm": "140-160 BPM",
+        "style_tags": "Emotional Drop, Supersaws, Chord Stabs, Pitched Vocals, Dreamy Build, Melodic Bass",
+        "visual_vibe": "Dreamy pastel watercolor cosmos, floating island ecosystem with glowing crystal formations, luminous aurora ribbons in sky, anime-style protagonist gazing upward, soft pink purple blue gradient, magical realism illustration style",
+        "hashtags": "#futurebass #emotionaldrop #flume #melodicbass #rave2026 #edmdrop",
+    },
+    # ── Drum & Bass / Breaks ──────────────────────────────────────────────────
+    "Liquid Drum & Bass": {
+        "bpm": "174 BPM",
+        "style_tags": "Liquid DnB, Soulful Vocals, Rolling Breaks, Deep Sub Bass, Smooth, Jazz Influenced",
+        "visual_vibe": "Smooth liquid metal surfaces forming organic flowing waves, deep ocean abyss with bioluminescent creatures, calming dark teal and chrome palette, seamless infinite loop visual, ultra-high-resolution fluid simulation render",
+        "hashtags": "#liquiddnb #drumandbass #dnb #liquidfunk #deepdnb #bassmusic",
+    },
+    "Neurofunk / Dark DnB": {
+        "bpm": "174-176 BPM",
+        "style_tags": "Neurofunk, Reese Bass, Complex Breaks, Dark Industrial, Sci-fi, Mechanical Growl",
+        "visual_vibe": "Dystopian cyberpunk megacity from insect eye-view, massive chrome machinery gears and pipes, acid rain corroding dark steel, flickering holographic warning signs, toxic green and rust orange on black, hyper-detailed mechanical horror aesthetic",
+        "hashtags": "#neurofunk #darkdnb #drumandbass #dnb #scifi #bassweight",
+    },
+    # ── House Family ─────────────────────────────────────────────────────────
+    "Melodic House & Techno": {
+        "bpm": "120-125 BPM",
+        "style_tags": "Melodic Techno, Emotional, Arpeggio Synth, Deep Groove, Organic Percussion, Tale of Us style",
+        "visual_vibe": "Solitary figure standing at edge of vast salt flat at dusk, mirror reflection of moody purple-orange sky, minimalist vast empty landscape, single spotlight from above, cinematic melancholic tone, Terrence Malick visual poetry style",
+        "hashtags": "#melodichouse #melodictechno #afterlife #taleofus #deephouse #underground",
+    },
+    "Afro House / Amapiano": {
+        "bpm": "112-116 BPM",
+        "style_tags": "Log Drum Bass, Afro Percussion, Piano Stabs, South African, Soulful Vocals, Groove",
+        "visual_vibe": "Vibrant South African township sunset celebration, warm terracotta and gold earth tones, silhouette dancers against burning orange sky, traditional patterns blended with modern fashion, dust particles catching golden light, joyful communal energy",
+        "hashtags": "#amapiano #afrohouse #piano #southafrica #logdrum #afrobeats",
+    },
+    "Progressive House": {
+        "bpm": "126-128 BPM",
+        "style_tags": "Long Build-up, Emotional Melody, Orchestral Stabs, Smooth Bassline, Epic Drop, Euphoric",
+        "visual_vibe": "Sunrise over infinite ocean horizon from first-person perspective on luxury yacht deck, golden lens flare expanding across widescreen frame, wispy cirrus clouds turning gold-pink, calm deep blue water, epic scale solitary beauty",
+        "hashtags": "#progressivehouse #proghouse #epicdrop #festival #mainstage #rave2026",
+    },
+    # ── Nhạc Việt ─────────────────────────────────────────────────────────────
+    "Nhạc Vàng / Bolero": {
+        "bpm": "60-80 BPM",
+        "style_tags": "Bolero, Guitar Điện, Kèn Saxophone, Câu từ sâu lắng, Nostalgic, Vietnamese Traditional",
+        "visual_vibe": "Nostalgic 1970s Vietnamese street scene, warm sepia-tinted lantern light on old Saigon alleyway, áo dài woman silhouette by cyclo, antique photograph grain texture, warm amber and faded gold palette, bittersweet romantic atmosphere",
+        "hashtags": "#nhacvang #bolero #nhactru #nhacviet #nhacbuon #amnhac",
+    },
+    "V-Pop / Nhạc Trẻ": {
+        "bpm": "95-115 BPM",
+        "style_tags": "Vietnamese Pop, Catchy Hook, Modern Production, Bright Melody, Youth Energy, Radio-ready",
+        "visual_vibe": "Trendy young Vietnamese couple in modern Hanoi café district, soft pastel neon signage, lush tropical plants mixed with minimalist concrete architecture, golden hour light through glass facade, fresh vibrant color palette, Korean-influenced aesthetic",
+        "hashtags": "#vpop #nhactre #nhacviet #pop2026 #vpopmusic #viet",
+    },
+    # ── Toàn cầu / Trending ──────────────────────────────────────────────────
+    "K-Pop Style": {
+        "bpm": "105-130 BPM",
+        "style_tags": "K-Pop, Ultra-polished Production, Punchy Synth, Hook-driven, Dynamic Arrangement, Group Performance",
+        "visual_vibe": "Ultra-modern K-Pop MV aesthetic, holographic stage with massive LED wall displaying geometric patterns, synchronized dancer formation on glass-floor stage, sharp fashion editorial lighting, bold primary colors on white backdrop, precision choreography energy",
+        "hashtags": "#kpop #kpopcover #kmusic #idol #dance #pop2026",
+    },
+    "Trap / Dark Trap": {
+        "bpm": "130-160 BPM",
+        "style_tags": "808 Bass, Hi-hat Rolls, Trap Snare, Dark Atmosphere, Melodic Trap, Ominous Pad",
+        "visual_vibe": "Midnight urban rooftop overlooking city skyline, lone hooded figure with back to camera, purple and black moody skyline, distant city lights blurred bokeh, dramatic god-rays through stormclouds, cinematic street noir aesthetic",
+        "hashtags": "#trap #darktrap #808 #trapsoul #hiphop #trapmusic",
+    },
+    "Jersey Club / Ballroom": {
+        "bpm": "130-160 BPM",
+        "style_tags": "Jersey Club, Chopped Vocals, Rapid Hi-hat Pattern, Hard Kicks, Aggressive Sample, Dance Energy",
+        "visual_vibe": "Underground ballroom voguing competition floor, dramatic runway lighting in hot pink and white, elaborate fashion-forward outfits, motion-blur dance energy, close-up of athletic footwork on reflective floor, raw high-energy documentary style",
+        "hashtags": "#jerseyclub #ballroom #club #dancechallenge #voguing #clubmusic",
+    },
+    "Melodic Dubstep": {
+        "bpm": "140 BPM",
+        "style_tags": "Emotional Intro, Wubstep, Heavy Drop, Cinematic Build, Orchestra + Bass, Dubstep Wobble",
+        "visual_vibe": "Anime battle scene at peak emotional moment, lone warrior standing in eye of massive energy storm, shockwave rings expanding outward, dramatic color contrast between ethereal light blue calm center and raging dark violet storm walls, ultra-cinematic widescreen",
+        "hashtags": "#melodicdubstep #dubstep #bassdrop #emotional #edm #wub",
+    },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
 
