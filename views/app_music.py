@@ -161,6 +161,7 @@ for _k, _v in {
     "video_scripts": {},      # track_key -> script text
     "keyword_result": None,   # trending keyword lookup result
     "current_history_id": None,  # Firestore doc id for Suno URL updates
+    "suno_credits": None,        # cached credit balance from sunoapi.org
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -948,6 +949,27 @@ with st.sidebar:
         help="V4_5/V5: up to 8 phút | V4: up to 4 phút",
     )
 
+    # Suno credit check
+    if st.session_state.get("suno_api_key"):
+        _cr_col1, _cr_col2 = st.columns([2, 1])
+        if _cr_col1.button("💳 Kiểm tra credit Suno", use_container_width=True, key="suno_credit_btn"):
+            with st.spinner("Đang kiểm tra…"):
+                try:
+                    _cr = requests.get(
+                        f"{SUNO_BASE}/credit",
+                        headers={"Authorization": f"Bearer {st.session_state.suno_api_key}"},
+                        timeout=10,
+                    ).json()
+                    _d = _cr.get("data") or {}
+                    st.session_state.suno_credits = (
+                        _d.get("credits") or _d.get("remainingCredits")
+                        or _d.get("remaining") or _cr.get("credits", "?")
+                    )
+                except Exception as _ce:
+                    st.session_state.suno_credits = f"Lỗi: {str(_ce)[:40]}"
+        if st.session_state.suno_credits is not None:
+            _cr_col2.metric("💳", st.session_state.suno_credits)
+
     if st.button("💾 Lưu API Keys", use_container_width=True):
         save_api_keys(
             st.session_state.get("anthropic_api_key", ""),
@@ -1098,7 +1120,40 @@ with st.sidebar:
                             st.rerun()
             except Exception:
                 st.info("Không thể tải lịch sử.")
-    st.divider()
+    # ── Cost estimate ─────────────────────────────────────────────────────────
+    _SONNET_IN  = 3.00  / 1_000_000   # $ per input token
+    _SONNET_OUT = 15.00 / 1_000_000   # $ per output token
+    _SYS_TOKENS = 4_000               # SYSTEM_PROMPT ≈ 4 000 tokens
+
+    _est_batches  = compute_batches(num_tracks)
+    _n_batches    = len(_est_batches)
+    _est_in       = _SYS_TOKENS * _n_batches + 160 * _n_batches
+    _est_out      = sum(700 + (e - s + 1) * 950 for s, e in _est_batches)
+    _cost_in      = _est_in  * _SONNET_IN
+    _cost_out     = _est_out * _SONNET_OUT
+    _cost_total   = _cost_in + _cost_out
+    _suno_clips   = num_tracks * 2
+    _credits_left = st.session_state.suno_credits
+
+    with st.expander("💰 Ước tính chi phí", expanded=True):
+        st.markdown(
+            f"**Claude Sonnet 4.6**\n"
+            f"- Input : ~{_est_in:,} tokens → **${_cost_in:.3f}**\n"
+            f"- Output: ~{_est_out:,} tokens → **${_cost_out:.3f}**\n"
+            f"- Tổng  : **~${_cost_total:.3f}** / lần generate"
+        )
+        st.divider()
+        _suno_line = f"**Suno**: {num_tracks} track × 2 clips = **{_suno_clips} clips**"
+        if isinstance(_credits_left, (int, float)):
+            _after = int(_credits_left) - _suno_clips
+            _color = "🟢" if _after >= 0 else "🔴"
+            _suno_line += f"\n{_color} Credit: {int(_credits_left)} → còn **{_after}** sau khi tạo"
+        elif _credits_left and not str(_credits_left).startswith("Lỗi"):
+            _suno_line += f"\n💳 Credit hiện tại: **{_credits_left}**"
+        else:
+            _suno_line += "\n_(Bấm 💳 Kiểm tra credit để xem số dư)_"
+        st.markdown(_suno_line)
+
     generate_btn = st.button("🚀 Bắt đầu sản xuất", use_container_width=True, type="primary")
 
 # ---------------------------------------------------------------------------
