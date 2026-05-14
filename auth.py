@@ -61,6 +61,29 @@ def load_api_keys() -> dict:
         pass
     return {}
 
+
+# ---------------------------------------------------------------------------
+# Preset persistence
+# ---------------------------------------------------------------------------
+_PRESETS_COOKIE = "nhacheocon_presets"
+_PRESETS_MAX    = 10
+
+def save_presets(presets: list):
+    try:
+        _cookie_mgr().set(
+            _PRESETS_COOKIE, json.dumps(presets[-_PRESETS_MAX:]),
+            expires_at=datetime.now() + timedelta(days=365),
+        )
+    except Exception:
+        pass
+
+def load_presets() -> list:
+    try:
+        raw = _cookie_mgr().get(_PRESETS_COOKIE) or "[]"
+        return json.loads(raw)
+    except Exception:
+        return []
+
 PLAN_DURATION = {
     "Ngày":  timedelta(days=1),
     "Tuần":  timedelta(weeks=1),

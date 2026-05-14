@@ -4,6 +4,7 @@ from auth import (
     show_auth_ui, verify_and_load_user,
     activate_plan, save_music_history, get_music_history, sign_out,
     save_api_keys, load_api_keys,
+    save_presets, load_presets,
 )
 import requests
 import json
@@ -973,7 +974,7 @@ with st.sidebar:
 
     st.divider()
 
-    num_tracks = st.number_input("Số lượng bài cần tạo:", min_value=1, max_value=20, value=10)
+    num_tracks = st.number_input("Số lượng bài cần tạo:", min_value=1, max_value=20, value=10, key="num_tracks")
     language = st.selectbox(
         "Ngôn ngữ đầu ra:",
         ["English", "Tiếng Việt", "Japanese"],
@@ -988,7 +989,47 @@ with st.sidebar:
         )
 
     st.subheader("🎨 Tùy chọn Visual")
-    create_mv = st.checkbox("Tạo kịch bản MV (Video 2)")
+    create_mv = st.checkbox("Tạo kịch bản MV (Video 2)", key="create_mv_check")
+
+    st.divider()
+    # ── Presets ──────────────────────────────────────────────────────────────
+    st.subheader("⭐ Presets")
+    _presets = load_presets()
+    _preset_names = [p["name"] for p in _presets]
+
+    if _preset_names:
+        _sel = st.selectbox("Preset đã lưu:", ["— Chọn —"] + _preset_names, key="preset_select")
+        if _sel != "— Chọn —":
+            _p = next((p for p in _presets if p["name"] == _sel), None)
+            _pa, _pd = st.columns(2)
+            if _pa.button("▶ Áp dụng", use_container_width=True, key="preset_apply"):
+                st.session_state.music_genre       = _p.get("genre", GENRE_NAMES[0])
+                st.session_state.language_select   = _p.get("language", "Tiếng Việt")
+                st.session_state.num_tracks        = int(_p.get("num_tracks", 10))
+                st.session_state.create_mv_check   = bool(_p.get("create_mv", False))
+                st.session_state.suno_model        = _p.get("suno_model", "V4_5")
+                st.rerun()
+            if _pd.button("🗑️ Xóa", use_container_width=True, key="preset_delete"):
+                save_presets([p for p in _presets if p["name"] != _sel])
+                st.session_state.pop("preset_select", None)
+                st.rerun()
+
+    _pname = st.text_input("Tên preset:", placeholder="VD: Album EDM 10 bài VI", key="preset_name_input")
+    if st.button("💾 Lưu cấu hình hiện tại", use_container_width=True, key="preset_save"):
+        if not _pname.strip():
+            st.warning("Nhập tên preset trước khi lưu.")
+        else:
+            _new = {
+                "name":       _pname.strip(),
+                "genre":      st.session_state.get("music_genre", GENRE_NAMES[0]),
+                "num_tracks": int(st.session_state.get("num_tracks", 10)),
+                "language":   st.session_state.get("language_select", "Tiếng Việt"),
+                "create_mv":  bool(st.session_state.get("create_mv_check", False)),
+                "suno_model": st.session_state.get("suno_model", "V4_5"),
+            }
+            _updated = [p for p in _presets if p["name"] != _new["name"]] + [_new]
+            save_presets(_updated)
+            st.success(f"Đã lưu preset **{_new['name']}**!")
 
     st.divider()
     if st.session_state.user:
