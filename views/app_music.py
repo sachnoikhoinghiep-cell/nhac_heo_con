@@ -153,6 +153,7 @@ for _k, _v in {
     "images": {},
     "suno_tracks": {},
     "suno_audio": {},
+    "suno_failed": {},   # track_key -> error message
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -656,8 +657,10 @@ def generate_all_tracks(items: list, max_workers: int = 5):
                 task_map[tk]  = tid
                 statuses[tk]  = f"submitted {tid[:10]}"
                 submit_ok    += 1
+                st.session_state.suno_failed.pop(tk, None)
             else:
                 statuses[tk] = f"FAIL submit: {err[:50]}"
+                st.session_state.suno_failed[tk] = f"submit: {err}"
             bar.progress(submit_ok / n * 0.08, text=f"Submitted {submit_ok}/{n}…")
             _render_log()
 
@@ -680,12 +683,14 @@ def generate_all_tracks(items: list, max_workers: int = 5):
                     suno_list = data["response"]["sunoData"]
                     suno_data_map[tk] = suno_list
                     st.session_state.suno_tracks[tk] = suno_list
+                    st.session_state.suno_failed.pop(tk, None)
                     dur = " / ".join(fmt_duration(t.get("duration")) for t in suno_list)
                     statuses[tk] = f"done ✅ {dur}"
                     completed.add(tk)
                 elif status in SUNO_FAIL_STATUS:
                     err_msg = data.get("errorMessage") or data.get("msg") or status
                     statuses[tk] = f"FAIL {str(err_msg)[:50]}"
+                    st.session_state.suno_failed[tk] = str(err_msg)
                     completed.add(tk)
             except Exception as e:
                 statuses[tk] = f"poll error: {str(e)[:40]}"
@@ -727,7 +732,11 @@ def generate_all_tracks(items: list, max_workers: int = 5):
 
 def music_widget(title: str, style: str, lyrics: str, track_key: str):
     """Per-track Suno UI: generate button → progress → preview → full player + download."""
-    tracks = st.session_state.suno_tracks.get(track_key)
+    tracks   = st.session_state.suno_tracks.get(track_key)
+    fail_msg = st.session_state.suno_failed.get(track_key)
+
+    if fail_msg:
+        st.error(f"❌ Thất bại: {fail_msg}")
 
     if tracks:
         ver_tabs = st.tabs(["🎵 Version A", "🎵 Version B"])
@@ -752,8 +761,15 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
                         key=f"dl_mp3_{track_key}_v{vi}",
                     )
 
-    btn_label = "🔄 Tạo lại Suno" if tracks else "🎵 Tạo nhạc Suno"
+    if fail_msg:
+        btn_label = "🔄 Tạo lại"
+    elif tracks:
+        btn_label = "🔄 Tạo lại Suno"
+    else:
+        btn_label = "🎵 Tạo nhạc Suno"
+
     if st.button(btn_label, key=f"gen_suno_{track_key}"):
+        st.session_state.suno_failed.pop(track_key, None)
         run_suno_generation(title, style, lyrics, track_key)
 
 # ---------------------------------------------------------------------------
@@ -1083,6 +1099,25 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                     else:
                         st.markdown(f"{i}. {t}")
 
+                # ── Failed tracks panel ────────────────────────────────────
+                _failed_panel = [
+                    (f"track_{i}", t)
+                    for i, t in enumerate(tracks, 1)
+                    if isinstance(t, dict) and f"track_{i}" in st.session_state.suno_failed
+                ]
+                if _failed_panel:
+                    st.warning(f"⚠️ **{len(_failed_panel)} bài thất bại** — Thử lại từng bài:")
+                    for _tk, _t in _failed_panel:
+                        _err = st.session_state.suno_failed.get(_tk, "")
+                        _fc1, _fc2 = st.columns([3, 1])
+                        _fc1.caption(f"❌ **{_t.get('title', _tk)}** — {_err[:70]}")
+                        if _fc2.button("🔄 Thử lại", key=f"retry_panel_{_tk}", use_container_width=True):
+                            st.session_state.suno_failed.pop(_tk, None)
+                            run_suno_generation(
+                                _t.get("title", ""), _t.get("music_style", ""),
+                                _t.get("lyrics", ""), _tk,
+                            )
+
                 # ── Send button ────────────────────────────────────────────
                 selected_items = [
                     (t.get("title", f"Track {i}"), t.get("music_style", ""), t.get("lyrics", ""), f"track_{i}")
@@ -1241,6 +1276,7 @@ if generate_btn:
             st.session_state.images = {}
             st.session_state.suno_tracks = {}
             st.session_state.suno_audio = {}
+            st.session_state.suno_failed = {}
 
         except json.JSONDecodeError as e:
             st.error(f"Lỗi phân tích JSON từ Claude: {e}")
