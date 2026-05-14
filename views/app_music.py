@@ -16,6 +16,7 @@ from prompts import (
     build_single_prompt,
     build_album_first_batch_prompt,
     build_album_continuation_prompt,
+    build_video_script_prompt,
 )
 
 # ---------------------------------------------------------------------------
@@ -153,7 +154,8 @@ for _k, _v in {
     "images": {},
     "suno_tracks": {},
     "suno_audio": {},
-    "suno_failed": {},   # track_key -> error message
+    "suno_failed": {},        # track_key -> error message
+    "video_scripts": {},      # track_key -> script text
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -730,6 +732,26 @@ def generate_all_tracks(items: list, max_workers: int = 5):
     st.rerun()
 
 
+def generate_video_script(title: str, style: str, lyrics: str, track_key: str):
+    """Call Claude Haiku to write a YouTube video script, store in session_state."""
+    api_key = st.session_state.get("anthropic_api_key", "").strip()
+    if not api_key:
+        st.warning("Nhập Anthropic API Key ở sidebar để tạo script video.")
+        return
+    meta     = st.session_state.get("music_meta", {})
+    topic    = meta.get("topic", title)
+    genre    = meta.get("music_genre", "Thiếu Nhi (Nursery)")
+    language = st.session_state.get("language_select", "Tiếng Việt")
+    prompt   = build_video_script_prompt(title, topic, genre, style, lyrics, language)
+    client   = anthropic.Anthropic(api_key=api_key)
+    msg      = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    st.session_state.video_scripts[track_key] = msg.content[0].text.strip()
+
+
 def music_widget(title: str, style: str, lyrics: str, track_key: str):
     """Per-track Suno UI: generate button → progress → preview → full player + download."""
     tracks   = st.session_state.suno_tracks.get(track_key)
@@ -771,6 +793,34 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
     if st.button(btn_label, key=f"gen_suno_{track_key}"):
         st.session_state.suno_failed.pop(track_key, None)
         run_suno_generation(title, style, lyrics, track_key)
+
+    # ── Video Script ───────────────────────────────────────────────────────
+    script = st.session_state.video_scripts.get(track_key)
+    with st.expander("📽️ Script Video", expanded=bool(script)):
+        if script:
+            st.code(script, language="markdown")
+            sc1, sc2 = st.columns(2)
+            if sc1.button("🔄 Tạo lại script", key=f"regen_script_{track_key}",
+                          use_container_width=True):
+                with st.spinner("Đang viết script…"):
+                    try:
+                        generate_video_script(title, style, lyrics, track_key)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi tạo script: {e}")
+            if sc2.button("🗑️ Xóa script", key=f"del_script_{track_key}",
+                          use_container_width=True):
+                st.session_state.video_scripts.pop(track_key, None)
+                st.rerun()
+        else:
+            if st.button("✍️ Tạo Script Video", key=f"gen_script_{track_key}",
+                         use_container_width=True):
+                with st.spinner("Claude đang viết script…"):
+                    try:
+                        generate_video_script(title, style, lyrics, track_key)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi tạo script: {e}")
 
 # ---------------------------------------------------------------------------
 # JSON helpers
@@ -1277,6 +1327,7 @@ if generate_btn:
             st.session_state.suno_tracks = {}
             st.session_state.suno_audio = {}
             st.session_state.suno_failed = {}
+            st.session_state.video_scripts = {}
 
         except json.JSONDecodeError as e:
             st.error(f"Lỗi phân tích JSON từ Claude: {e}")

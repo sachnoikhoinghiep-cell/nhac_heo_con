@@ -177,6 +177,57 @@ Generate the album title, tracks {batch_start}–{batch_end} with full lyrics, v
 Return the ALBUM FIRST BATCH format JSON with exactly {batch_end - batch_start + 1} tracks in the "tracks" array.
 """
 
+def build_video_script_prompt(
+    title: str,
+    topic: str,
+    genre: str,
+    style: str,
+    lyrics_preview: str,
+    language: str,
+) -> str:
+    return f"""You are a professional YouTube content creator writing a ready-to-record video script.
+
+Track title : {title}
+Album topic : {topic}
+Music genre : {genre}
+Music style : {style}
+Language    : {language}
+Lyrics preview (first 300 chars):
+{lyrics_preview[:300]}
+
+Write a complete, natural-sounding script a creator can read directly on camera.
+Use the EXACT language specified above for ALL spoken text.
+
+Structure (use these headers verbatim):
+
+## 🎬 INTRO (0:00 – 0:20)
+Three parts:
+1. HOOK (first 3 seconds) — one punchy sentence that stops the scroll.
+2. GREETING — warm welcome, mention channel/topic briefly.
+3. PREVIEW — one sentence telling viewers what they are about to watch/hear.
+
+## 🎵 DURING MUSIC (overlay cues)
+Two or three short on-screen text / action cues timed to the music (e.g. "Show lyrics karaoke", "Cut to animation", "Show subscribe button pop-up").
+
+## 🔔 MID-ROLL CTA (at the halfway point)
+Natural in-video prompt: ask viewers ONE specific question related to the song topic for the comment section. Then a 1-sentence subscribe reminder. Keep this under 15 seconds when spoken.
+
+## 🎬 OUTRO (last 0:30)
+1. Brief wrap-up (what they just heard).
+2. Thank-you line.
+3. Like + Subscribe + Comment CTA — specific and energetic, not generic.
+4. Tease next video (1 sentence, vague but exciting).
+
+## 📌 END SCREEN (last 20 seconds)
+List exactly 3 end-screen card suggestions:
+- Recommended video card
+- Playlist card
+- Subscribe button
+
+Keep total script under 250 words. Write conversationally — no stiff formal language.
+Do NOT include JSON. Return plain text only."""
+
+
 def build_album_continuation_prompt(
     topic: str,
     album_title: str,
