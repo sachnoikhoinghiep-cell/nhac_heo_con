@@ -348,16 +348,20 @@ def activate_plan(uid: str, plan: str):
 
 def save_music_history(uid: str, topic: str, genre: str, num_tracks: int,
                        result: dict, create_mv: bool = False) -> str:
-    """Save generation to Firestore. Returns doc_id for later Suno updates."""
-    db  = init_firebase()
-    now = datetime.now(timezone.utc)
-    _, doc_ref = db.collection("users").document(uid).collection("music_history").add({
-        "topic": topic, "genre": genre, "num_tracks": num_tracks,
-        "create_mv": create_mv,
-        "created_at": now,
-        "expire_at":  now + timedelta(hours=72),
-        "result": result,
-        "suno_results": {},   # filled in later by update_history_suno
+    """Save a generation project to Firestore. Returns doc_id for later Suno updates."""
+    db           = init_firebase()
+    now          = datetime.now(timezone.utc)
+    project_name = result.get("title") or topic   # Claude-generated title as project name
+    _, doc_ref   = db.collection("users").document(uid).collection("music_history").add({
+        "project_name": project_name,
+        "topic":        topic,
+        "genre":        genre,
+        "num_tracks":   num_tracks,
+        "create_mv":    create_mv,
+        "created_at":   now,
+        "expire_at":    now + timedelta(hours=72),
+        "result":       result,
+        "suno_results": {},
     })
     return doc_ref.id
 

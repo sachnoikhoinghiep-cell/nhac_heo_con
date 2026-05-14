@@ -1077,21 +1077,25 @@ with st.sidebar:
 
     st.divider()
     if st.session_state.user:
-        with st.expander("🕘 Lịch sử (72h gần nhất)", expanded=False):
+        with st.expander("📁 Projects (72h)", expanded=False):
             try:
                 history = get_music_history(st.session_state.user["uid"])
                 if not history:
-                    st.info("Chưa có lịch sử tạo nhạc.")
+                    st.info("Chưa có project nào.")
                 for _h in history:
-                    _ts     = _h.get("created_at")
-                    _ts_str = _ts.strftime("%d/%m %H:%M") if _ts else ""
-                    _n_suno = len(_h.get("suno_results", {}))
-                    _badge  = f" 🎵{_n_suno}" if _n_suno else ""
-                    _label  = f"{_h.get('topic','')[:22]}{_badge} · {_ts_str}"
+                    _ts      = _h.get("created_at")
+                    _ts_str  = _ts.strftime("%d/%m %H:%M") if _ts else ""
+                    _n_suno  = len(_h.get("suno_results", {}))
+                    _badge   = f" 🎵{_n_suno}" if _n_suno else ""
+                    # Project name = Claude title (saved on generation) or fallback to topic
+                    _pname   = _h.get("project_name") or _h.get("topic", "—")
+                    _label   = f"📁 {_pname[:24]}{_badge}  ·  {_ts_str}"
                     with st.expander(_label, expanded=False):
-                        st.caption(f"**{_h.get('genre','')}** · {_h.get('num_tracks','')} bài")
-                        # Track list preview from Claude result
-                        _res = _h.get("result", {})
+                        st.caption(
+                            f"**{_h.get('genre','')}** · {_h.get('num_tracks','')} bài"
+                            + (f" · chủ đề: _{_h.get('topic','')}_" if _h.get("topic") else "")
+                        )
+                        _res   = _h.get("result", {})
                         _tlist = _res.get("tracks", [])
                         if _tlist:
                             for _t in _tlist[:6]:
@@ -1100,16 +1104,16 @@ with st.sidebar:
                             if len(_tlist) > 6:
                                 st.caption(f"  …+{len(_tlist)-6} bài")
                         elif _res.get("title"):
-                            st.caption(f"Single: {_res['title']}")
-                        # Restore button
-                        if st.button("🔄 Khôi phục", key=f"hr_{_h['id']}",
+                            st.caption(f"🎵 Single: {_res['title']}")
+                        if st.button("🔄 Khôi phục project", key=f"hr_{_h['id']}",
                                      use_container_width=True, type="primary"):
                             st.session_state.music_result = _res
                             st.session_state.music_meta   = {
-                                "topic":       _h.get("topic", ""),
-                                "num_tracks":  _h.get("num_tracks", 1),
-                                "create_mv":   _h.get("create_mv", False),
-                                "music_genre": _h.get("genre", "Thiếu Nhi (Nursery)"),
+                                "topic":        _h.get("topic", ""),
+                                "num_tracks":   _h.get("num_tracks", 1),
+                                "create_mv":    _h.get("create_mv", False),
+                                "music_genre":  _h.get("genre", "Thiếu Nhi (Nursery)"),
+                                "project_name": _pname,
                             }
                             _suno = _h.get("suno_results", {})
                             if _suno:
@@ -1119,7 +1123,7 @@ with st.sidebar:
                             st.session_state.current_history_id = _h["id"]
                             st.rerun()
             except Exception:
-                st.info("Không thể tải lịch sử.")
+                st.info("Không thể tải projects.")
     # ── Cost estimate ─────────────────────────────────────────────────────────
     _SONNET_IN  = 3.00  / 1_000_000   # $ per input token
     _SONNET_OUT = 15.00 / 1_000_000   # $ per output token
