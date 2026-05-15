@@ -978,16 +978,20 @@ with st.sidebar:
                             )
                             if _val is not None:
                                 break
-                            _debug_lines[-1] += f" body={str(_cr)[:60]}"
+                            _debug_lines[-1] += f"  body={str(_cr)[:80]}"
                     if _val is not None:
                         st.session_state.suno_credits = _val
+                        st.session_state.pop("suno_credit_debug", None)
                     else:
-                        st.session_state.suno_credits = "? debug↓"
-                        st.code("\n".join(_debug_lines), language="text")
+                        st.session_state.suno_credits = None
+                        st.session_state.suno_credit_debug = "\n".join(_debug_lines)
                 except Exception as _ce:
-                    st.session_state.suno_credits = f"Lỗi: {str(_ce)[:60]}"
+                    st.session_state.suno_credits = None
+                    st.session_state.suno_credit_debug = f"Exception: {_ce}"
         if st.session_state.suno_credits is not None:
             _cr_col2.metric("💳", st.session_state.suno_credits)
+        if st.session_state.get("suno_credit_debug"):
+            st.code(st.session_state.suno_credit_debug, language="text")
 
     if st.button("💾 Lưu API Keys", use_container_width=True):
         save_api_keys(
