@@ -955,25 +955,31 @@ with st.sidebar:
         if _cr_col1.button("💳 Kiểm tra credit Suno", use_container_width=True, key="suno_credit_btn"):
             with st.spinner("Đang kiểm tra…"):
                 try:
-                    _resp = requests.get(
-                        f"{SUNO_BASE}/credit",
-                        headers={"Authorization": f"Bearer {st.session_state.suno_api_key}"},
-                        timeout=10,
-                    )
-                    _cr = _resp.json()
-                    _d  = _cr.get("data") or {}
-                    # search all common field names across sunoapi.org versions
-                    _val = (
-                        _d.get("credits") or _d.get("remainingCredits") or _d.get("remaining")
-                        or _d.get("balance") or _d.get("credit")
-                        or _cr.get("credits") or _cr.get("remainingCredits")
-                        or _cr.get("remaining") or _cr.get("balance")
-                    )
-                    if _val is None:
-                        # show raw so user can report the structure
-                        st.session_state.suno_credits = f"? (raw: {str(_cr)[:80]})"
-                    else:
+                    _hdrs = {"Authorization": f"Bearer {st.session_state.suno_api_key}"}
+                    _CREDIT_PATHS = [
+                        "/credits", "/credit", "/account/credits",
+                        "/user/credits", "/account", "/user/info",
+                    ]
+                    _cr, _val = {}, None
+                    for _path in _CREDIT_PATHS:
+                        _resp = requests.get(
+                            f"{SUNO_BASE}{_path}", headers=_hdrs, timeout=10
+                        )
+                        if _resp.status_code == 200:
+                            _cr = _resp.json()
+                            _d  = _cr.get("data") or {}
+                            _val = (
+                                _d.get("credits") or _d.get("remainingCredits")
+                                or _d.get("remaining") or _d.get("balance") or _d.get("credit")
+                                or _cr.get("credits") or _cr.get("remainingCredits")
+                                or _cr.get("remaining") or _cr.get("balance")
+                            )
+                            if _val is not None:
+                                break
+                    if _val is not None:
                         st.session_state.suno_credits = _val
+                    else:
+                        st.session_state.suno_credits = f"? (raw: {str(_cr)[:80]})"
                 except Exception as _ce:
                     st.session_state.suno_credits = f"Lỗi: {str(_ce)[:60]}"
         if st.session_state.suno_credits is not None:
