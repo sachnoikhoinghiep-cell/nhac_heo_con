@@ -949,49 +949,9 @@ with st.sidebar:
         help="V4_5/V5: up to 8 phút | V4: up to 4 phút",
     )
 
-    # Suno credit check
+    # Suno credit — sunoapi.org does not expose a credit API endpoint
     if st.session_state.get("suno_api_key"):
-        _cr_col1, _cr_col2 = st.columns([2, 1])
-        if _cr_col1.button("💳 Kiểm tra credit Suno", use_container_width=True, key="suno_credit_btn"):
-            with st.spinner("Đang kiểm tra…"):
-                try:
-                    _hdrs = {"Authorization": f"Bearer {st.session_state.suno_api_key}"}
-                    _CREDIT_PATHS = [
-                        "/credits", "/credit", "/account/credits",
-                        "/user/credits", "/account", "/user/info",
-                        "/quota", "/user/quota", "/generate/credits",
-                    ]
-                    _val, _debug_lines = None, []
-                    for _path in _CREDIT_PATHS:
-                        _resp = requests.get(
-                            f"{SUNO_BASE}{_path}", headers=_hdrs, timeout=10
-                        )
-                        _debug_lines.append(f"{_path} → {_resp.status_code}")
-                        if _resp.status_code == 200:
-                            _cr = _resp.json()
-                            _d  = _cr.get("data") or {}
-                            _val = (
-                                _d.get("credits") or _d.get("remainingCredits")
-                                or _d.get("remaining") or _d.get("balance") or _d.get("credit")
-                                or _cr.get("credits") or _cr.get("remainingCredits")
-                                or _cr.get("remaining") or _cr.get("balance")
-                            )
-                            if _val is not None:
-                                break
-                            _debug_lines[-1] += f"  body={str(_cr)[:80]}"
-                    if _val is not None:
-                        st.session_state.suno_credits = _val
-                        st.session_state.pop("suno_credit_debug", None)
-                    else:
-                        st.session_state.suno_credits = None
-                        st.session_state.suno_credit_debug = "\n".join(_debug_lines)
-                except Exception as _ce:
-                    st.session_state.suno_credits = None
-                    st.session_state.suno_credit_debug = f"Exception: {_ce}"
-        if st.session_state.suno_credits is not None:
-            _cr_col2.metric("💳", st.session_state.suno_credits)
-        if st.session_state.get("suno_credit_debug"):
-            st.code(st.session_state.suno_credit_debug, language="text")
+        st.caption("💳 [Xem credit tại sunoapi.org](https://sunoapi.org/dashboard)")
 
     if st.button("💾 Lưu API Keys", use_container_width=True):
         save_api_keys(
@@ -1170,15 +1130,10 @@ with st.sidebar:
             f"- Tổng  : **~${_cost_total:.3f}** / lần generate"
         )
         st.divider()
-        _suno_line = f"**Suno**: {num_tracks} track × 2 clips = **{_suno_clips} clips**"
-        if isinstance(_credits_left, (int, float)):
-            _after = int(_credits_left) - _suno_clips
-            _color = "🟢" if _after >= 0 else "🔴"
-            _suno_line += f"\n{_color} Credit: {int(_credits_left)} → còn **{_after}** sau khi tạo"
-        elif _credits_left and not str(_credits_left).startswith("Lỗi"):
-            _suno_line += f"\n💳 Credit hiện tại: **{_credits_left}**"
-        else:
-            _suno_line += "\n_(Bấm 💳 Kiểm tra credit để xem số dư)_"
+        _suno_line = (
+            f"**Suno**: {num_tracks} track × 2 clips = **{_suno_clips} clips**\n"
+            f"_(Kiểm tra số dư tại [sunoapi.org/dashboard](https://sunoapi.org/dashboard))_"
+        )
         st.markdown(_suno_line)
 
     generate_btn = st.button("🚀 Bắt đầu sản xuất", use_container_width=True, type="primary")
