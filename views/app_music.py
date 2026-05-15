@@ -1526,9 +1526,19 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
                         max_tokens=1024,
                         messages=[{"role": "user", "content": _kw_prompt}],
                     )
-                    st.session_state.keyword_result = json.loads(
-                        _fix_control_chars(_kw_msg.content[0].text.strip())
-                    )
+                    _kw_raw = _kw_msg.content[0].text.strip()
+                    # strip markdown code fences if Haiku wraps in ```json ... ```
+                    if _kw_raw.startswith("```"):
+                        _kw_raw = _kw_raw.split("```", 2)[1]
+                        if _kw_raw.startswith("json"):
+                            _kw_raw = _kw_raw[4:]
+                        _kw_raw = _kw_raw.strip()
+                    if not _kw_raw:
+                        st.error("Claude trả về phản hồi rỗng. Thử lại.")
+                    else:
+                        st.session_state.keyword_result = json.loads(
+                            _fix_control_chars(_kw_raw)
+                        )
                 except Exception as _kw_e:
                     st.error(f"Lỗi tra cứu: {_kw_e}")
 
