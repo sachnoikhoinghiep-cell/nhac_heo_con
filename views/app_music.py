@@ -959,12 +959,14 @@ with st.sidebar:
                     _CREDIT_PATHS = [
                         "/credits", "/credit", "/account/credits",
                         "/user/credits", "/account", "/user/info",
+                        "/quota", "/user/quota", "/generate/credits",
                     ]
-                    _cr, _val = {}, None
+                    _val, _debug_lines = None, []
                     for _path in _CREDIT_PATHS:
                         _resp = requests.get(
                             f"{SUNO_BASE}{_path}", headers=_hdrs, timeout=10
                         )
+                        _debug_lines.append(f"{_path} → {_resp.status_code}")
                         if _resp.status_code == 200:
                             _cr = _resp.json()
                             _d  = _cr.get("data") or {}
@@ -976,10 +978,12 @@ with st.sidebar:
                             )
                             if _val is not None:
                                 break
+                            _debug_lines[-1] += f" body={str(_cr)[:60]}"
                     if _val is not None:
                         st.session_state.suno_credits = _val
                     else:
-                        st.session_state.suno_credits = f"? (raw: {str(_cr)[:80]})"
+                        st.session_state.suno_credits = "? debug↓"
+                        st.code("\n".join(_debug_lines), language="text")
                 except Exception as _ce:
                     st.session_state.suno_credits = f"Lỗi: {str(_ce)[:60]}"
         if st.session_state.suno_credits is not None:
