@@ -41,8 +41,8 @@ def _clear_rt():
 # ---------------------------------------------------------------------------
 _APIKEY_COOKIE = "nhacheocon_ak"
 
-def save_api_keys(anthropic: str, google: str, suno: str):
-    data = json.dumps({"a": anthropic, "g": google, "s": suno})
+def save_api_keys(anthropic: str, google: str, suno: str, fal: str = ""):
+    data = json.dumps({"a": anthropic, "g": google, "s": suno, "f": fal})
     try:
         _cookie_mgr().set(
             _APIKEY_COOKIE, data,
@@ -56,7 +56,10 @@ def load_api_keys() -> dict:
         raw = _cookie_mgr().get(_APIKEY_COOKIE) or ""
         if raw:
             d = json.loads(raw)
-            return {"anthropic": d.get("a", ""), "google": d.get("g", ""), "suno": d.get("s", "")}
+            return {
+                "anthropic": d.get("a", ""), "google": d.get("g", ""),
+                "suno": d.get("s", ""), "fal": d.get("f", ""),
+            }
     except Exception:
         pass
     return {}

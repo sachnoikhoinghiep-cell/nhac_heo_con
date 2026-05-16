@@ -162,6 +162,7 @@ for _k, _v in {
     "keyword_result": None,   # trending keyword lookup result
     "current_history_id": None,  # Firestore doc id for Suno URL updates
     "suno_credits": None,        # cached credit balance from sunoapi.org
+    "fal_videos": {},            # scene_key -> video URL
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -175,6 +176,8 @@ if "api_keys_loaded" not in st.session_state:
         st.session_state.google_api_keys_raw = _saved["google"]
     if _saved.get("suno"):
         st.session_state.suno_api_key = _saved["suno"]
+    if _saved.get("fal"):
+        st.session_state.fal_api_key = _saved["fal"]
     st.session_state.api_keys_loaded = True
 
 # ---------------------------------------------------------------------------
@@ -457,6 +460,104 @@ def image_widget(prompt: str, img_key: str):
         )
 
 # ---------------------------------------------------------------------------
+# fal.ai Video generation
+# ---------------------------------------------------------------------------
+FAL_QUEUE_BASE = "https://queue.fal.run"
+FAL_MODELS = {
+    "Text-to-Video": "bytedance/seedance-2.0/text-to-video",
+    "Image-to-Video": "bytedance/seedance-2.0/image-to-video",
+    "Reference-to-Video": "bytedance/seedance-2.0/reference-to-video",
+}
+FAL_DURATIONS = ["auto"] + [str(i) for i in range(4, 16)]
+FAL_ASPECTS   = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "auto"]
+FAL_RESOLUTIONS = ["720p", "1080p", "480p"]
+
+def call_fal_video(api_key: str, model_id: str, payload: dict, status_slot) -> str:
+    """Submit to fal.ai queue, poll until COMPLETED, return video URL."""
+    headers = {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
+    resp = requests.post(f"{FAL_QUEUE_BASE}/{model_id}", json=payload, headers=headers, timeout=30)
+    resp.raise_for_status()
+    request_id = resp.json()["request_id"]
+    status_url  = f"{FAL_QUEUE_BASE}/{model_id}/requests/{request_id}/status"
+    result_url  = f"{FAL_QUEUE_BASE}/{model_id}/requests/{request_id}"
+    for attempt in range(72):   # max ~6 min
+        time.sleep(5)
+        s = requests.get(status_url, headers=headers, timeout=15).json()
+        st_code = s.get("status", "")
+        q_pos   = s.get("queue_position")
+        if q_pos:
+            status_slot.info(f"⏳ Đang chờ xử lý… Vị trí hàng đợi: {q_pos}")
+        elif st_code == "IN_PROGRESS":
+            status_slot.info(f"🎬 Đang render video… ({attempt * 5}s)")
+        if st_code == "COMPLETED":
+            result = requests.get(result_url, headers=headers, timeout=15).json()
+            return result["video"]["url"]
+        if st_code in ("FAILED", "ERROR"):
+            err = s.get("error") or {}
+            raise ValueError(err.get("msg") or err.get("message") or "Video generation failed")
+    raise TimeoutError("Video generation timed out (6 min)")
+
+
+def fal_video_widget(prompt: str, scene_key: str):
+    """Per-scene fal.ai video generation UI."""
+    fal_key = st.session_state.get("fal_api_key", "").strip()
+    if not fal_key:
+        st.caption("🔑 Nhập fal.ai API Key ở sidebar để tạo video.")
+        return
+
+    model_label = st.selectbox(
+        "Model:", list(FAL_MODELS.keys()),
+        key=f"fal_model_{scene_key}",
+    )
+    model_id = FAL_MODELS[model_label]
+
+    image_url = ""
+    if "Image" in model_label:
+        image_url = st.text_input(
+            "Image URL (JPG/PNG, max 30 MB):",
+            key=f"fal_img_{scene_key}",
+            placeholder="https://...",
+        )
+
+    p1, p2, p3, p4 = st.columns(4)
+    duration   = p1.selectbox("Duration",    FAL_DURATIONS,    key=f"fal_dur_{scene_key}")
+    aspect     = p2.selectbox("Aspect ratio", FAL_ASPECTS,     key=f"fal_asp_{scene_key}")
+    resolution = p3.selectbox("Resolution",  FAL_RESOLUTIONS,  key=f"fal_res_{scene_key}")
+    gen_audio  = p4.checkbox("Audio",  value=True,             key=f"fal_aud_{scene_key}")
+
+    existing = st.session_state.fal_videos.get(scene_key)
+    if existing:
+        st.video(existing)
+        st.download_button(
+            "⬇️ Tải video", existing,
+            file_name=f"{scene_key}.mp4", mime="video/mp4",
+            key=f"fal_dl_{scene_key}",
+        )
+
+    btn_label = "🔄 Tạo lại Video" if existing else "🎬 Tạo Video"
+    if st.button(btn_label, key=f"fal_gen_{scene_key}", use_container_width=True):
+        payload = {
+            "prompt":        prompt,
+            "resolution":    resolution,
+            "aspect_ratio":  aspect,
+            "generate_audio": gen_audio,
+        }
+        if duration != "auto":
+            payload["duration"] = int(duration)
+        if image_url:
+            payload["image_url"] = image_url
+        status_slot = st.empty()
+        try:
+            with st.spinner("Đang gửi yêu cầu tới fal.ai…"):
+                video_url = call_fal_video(fal_key, model_id, payload, status_slot)
+            st.session_state.fal_videos[scene_key] = video_url
+            status_slot.empty()
+            st.rerun()
+        except Exception as _fal_e:
+            status_slot.empty()
+            st.error(f"❌ Lỗi tạo video: {_fal_e}")
+
+
 # Suno API integration
 # ---------------------------------------------------------------------------
 SUNO_BASE = "https://api.sunoapi.org/api/v1"
@@ -971,11 +1072,21 @@ with st.sidebar:
     if st.session_state.get("suno_api_key"):
         st.caption("💳 [Xem credit tại sunoapi.org](https://sunoapi.org/dashboard)")
 
+    st.subheader("🎬 fal.ai Video Generation")
+    st.text_input(
+        "fal.ai API Key:",
+        type="password",
+        key="fal_api_key",
+        placeholder="fal-...",
+        help="Lấy key tại fal.ai/dashboard. Dùng Seedance 2.0 để tạo video từ kịch bản MV.",
+    )
+
     if st.button("💾 Lưu API Keys", use_container_width=True):
         save_api_keys(
             st.session_state.get("anthropic_api_key", ""),
             st.session_state.get("google_api_keys_raw", ""),
             st.session_state.get("suno_api_key", ""),
+            st.session_state.get("fal_api_key", ""),
         )
         st.success("Đã lưu! Lần sau vào app sẽ tự điền.")
 
@@ -1358,7 +1469,10 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                 scenes = data.get("video_scenes", [])
                 if scenes:
                     for i, scene in enumerate(scenes, 1):
-                        st.markdown(f"**Scene {i}:** {scene}")
+                        with st.expander(f"🎬 Scene {i}", expanded=(i == 1)):
+                            st.markdown(scene)
+                            st.divider()
+                            fal_video_widget(scene, f"scene_{i}")
                 else:
                     st.info("Không có dữ liệu cảnh.")
                 if "Relax" in music_genre or music_genre == "Ambient Relax (Meditation)":
