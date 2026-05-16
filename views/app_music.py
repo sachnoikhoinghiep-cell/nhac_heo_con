@@ -342,6 +342,16 @@ GENRE_CONFIG = {
         "visual_vibe": "Anime battle scene at peak emotional moment, lone warrior standing in eye of massive energy storm, shockwave rings expanding outward, dramatic color contrast between ethereal light blue calm center and raging dark violet storm walls, ultra-cinematic widescreen",
         "hashtags": "#melodicdubstep #dubstep #bassdrop #emotional #edm #wub",
     },
+    "Smooth Jazz (Lounge)": {
+        "bpm": "70-85 BPM",
+        "style_tags": "Smooth Jazz, Saxophone Lead, Piano Chords, Lounge Atmosphere, Slow Groovy, Soft Drums",
+        "visual_vibe": "Classy vintage bar, rainy night through a window, warm dim lighting, 3D isometric cozy room",
+    },
+    "Ambient Relax (Meditation)": {
+        "bpm": "60 BPM or Floating",
+        "style_tags": "Ambient, Healing, Tibetan Bowls, Soft Pads, Deep Sleep, Nature Sounds, No Drums",
+        "visual_vibe": "Cosmic nebula, misty morning forest, zen garden, peaceful floating particles, cinematic slow motion",
+    },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
 
