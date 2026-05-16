@@ -18,17 +18,57 @@ with st.expander("**Bước 1 — Đăng nhập & Chọn gói**", expanded=True)
     """)
 
 with st.expander("**Bước 2 — Chuẩn bị API Keys**", expanded=True):
-    st.markdown("""
-    Bạn cần 3 loại API key để dùng đầy đủ tính năng:
+    st.markdown("Bạn cần 4 loại API key để dùng đầy đủ tính năng. Nhấn link bên dưới để lấy từng key:")
 
-    | API | Dùng để | Lấy tại |
-    |-----|---------|---------|
-    | **Anthropic API** | Viết lời + cấu trúc nhạc | console.anthropic.com |
-    | **Google API** | Tạo ảnh thumbnail | aistudio.google.com |
-    | **Suno API** | Tạo file nhạc MP3 | sunoapi.org |
+    ak1, ak2 = st.columns(2)
 
-    > 💡 Nhập xong nhấn **💾 Lưu API Keys** — lần sau vào app sẽ tự điền, không cần nhập lại.
-    """)
+    with ak1:
+        st.markdown("""
+**🤖 Anthropic API** — viết lời & cấu trúc nhạc
+1. Vào [console.anthropic.com](https://console.anthropic.com)
+2. Đăng ký / Đăng nhập
+3. Chọn **API Keys** → **Create Key**
+4. Copy key bắt đầu bằng `sk-ant-...`
+5. Dán vào ô **Anthropic API Key** ở sidebar
+
+> Free tier: $5 credit khi đăng ký lần đầu.
+""")
+
+        st.markdown("""
+**🖼️ Google Gemini API** — tạo ảnh thumbnail
+1. Vào [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+2. Đăng nhập bằng Google
+3. Nhấn **Create API Key**
+4. Copy key bắt đầu bằng `AIzaSy...`
+5. Dán vào ô **Google API Keys** ở sidebar (mỗi key 1 dòng, nhập nhiều key để tránh hết quota)
+
+> Free tier: rất rộng rãi, đủ dùng cho cả ngày.
+""")
+
+    with ak2:
+        st.markdown("""
+**🎵 Suno API** — tạo file nhạc MP3
+1. Vào [sunoapi.org](https://sunoapi.org)
+2. Đăng ký tài khoản
+3. Vào **Dashboard** → **API Key**
+4. Copy key và dán vào ô **Suno API Key** ở sidebar
+5. Kiểm tra credit tại [sunoapi.org/dashboard](https://sunoapi.org/dashboard)
+
+> Mỗi bài nhạc tốn ~2 credits. Nạp thêm credit khi cần.
+""")
+
+        st.markdown("""
+**🎬 fal.ai API** — tạo video từ kịch bản MV
+1. Vào [fal.ai/dashboard](https://fal.ai/dashboard)
+2. Đăng ký / Đăng nhập
+3. Chọn **Keys** → **Add Key**
+4. Copy key bắt đầu bằng `fal-...`
+5. Dán vào ô **fal.ai API Key** ở sidebar
+
+> Dùng Seedance 2.0: text-to-video, image-to-video, reference-to-video.
+""")
+
+    st.info("💡 Nhập xong nhấn **💾 Lưu API Keys** — keys được lưu vào tài khoản, tự điền ở mọi thiết bị khi đăng nhập.")
 
 with st.expander("**Bước 3 — Tạo nhạc đầu tiên**", expanded=True):
     st.markdown("""

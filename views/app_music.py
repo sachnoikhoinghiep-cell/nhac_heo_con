@@ -1060,6 +1060,7 @@ with st.sidebar:
         key="anthropic_api_key",
         placeholder="sk-ant-...",
     )
+    st.caption("[Lấy Anthropic API key](https://console.anthropic.com)")
 
     st.subheader("🖼️ Google API Keys – Nano Banana 2")
     st.text_area(
@@ -1068,6 +1069,7 @@ with st.sidebar:
         height=90,
         placeholder="AIzaSy...\nAIzaSy...",
     )
+    st.caption("[Lấy Google Gemini API key](https://aistudio.google.com/app/apikey)")
     _gkeys = get_google_keys()
     if _gkeys:
         _active = (st.session_state.google_key_idx % len(_gkeys)) + 1
@@ -1080,6 +1082,7 @@ with st.sidebar:
         key="suno_api_key",
         placeholder="Suno API key...",
     )
+    st.caption("[Lấy Suno API key](https://sunoapi.org)")
     st.selectbox(
         "Suno Model:",
         ["V5_5", "V5", "V4_5PLUS", "V4_5", "V4"],
@@ -1097,8 +1100,8 @@ with st.sidebar:
         type="password",
         key="fal_api_key",
         placeholder="fal-...",
-        help="Lấy key tại fal.ai/dashboard. Dùng Seedance 2.0 để tạo video từ kịch bản MV.",
     )
+    st.caption("[Lấy fal.ai API key](https://fal.ai/dashboard)")
 
     if st.button("💾 Lưu API Keys", use_container_width=True):
         _k_ant = st.session_state.get("anthropic_api_key", "")
