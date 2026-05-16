@@ -42,6 +42,7 @@ def _clear_rt():
 _APIKEY_COOKIE = "nhacheocon_ak"
 
 def save_api_keys(anthropic: str, google: str, suno: str, fal: str = ""):
+    """Lưu API keys vào cookie (fallback cho user chưa login)."""
     data = json.dumps({"a": anthropic, "g": google, "s": suno, "f": fal})
     try:
         _cookie_mgr().set(
@@ -52,6 +53,7 @@ def save_api_keys(anthropic: str, google: str, suno: str, fal: str = ""):
         pass
 
 def load_api_keys() -> dict:
+    """Đọc API keys từ cookie."""
     try:
         raw = _cookie_mgr().get(_APIKEY_COOKIE) or ""
         if raw:
@@ -60,6 +62,24 @@ def load_api_keys() -> dict:
                 "anthropic": d.get("a", ""), "google": d.get("g", ""),
                 "suno": d.get("s", ""), "fal": d.get("f", ""),
             }
+    except Exception:
+        pass
+    return {}
+
+def save_user_api_keys(uid: str, anthropic: str, google: str, suno: str, fal: str = ""):
+    """Lưu API keys vào Firestore gắn với tài khoản user."""
+    db = init_firebase()
+    db.collection("users").document(uid).update({
+        "api_keys": {"anthropic": anthropic, "google": google, "suno": suno, "fal": fal},
+    })
+
+def load_user_api_keys(uid: str) -> dict:
+    """Đọc API keys từ Firestore của user. Trả về dict rỗng nếu chưa lưu."""
+    try:
+        db  = init_firebase()
+        doc = db.collection("users").document(uid).get()
+        if doc.exists:
+            return doc.to_dict().get("api_keys") or {}
     except Exception:
         pass
     return {}

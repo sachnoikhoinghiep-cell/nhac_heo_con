@@ -4,6 +4,7 @@ from auth import (
     show_auth_ui, verify_and_load_user,
     activate_plan, save_music_history, get_music_history, sign_out,
     save_api_keys, load_api_keys,
+    save_user_api_keys, load_user_api_keys,
     save_presets, load_presets,
     update_history_suno,
 )
@@ -167,18 +168,33 @@ for _k, _v in {
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
-# Load API keys từ cookie (chỉ lần đầu)
+# Load API keys — ưu tiên Firestore (user đã login), fallback cookie
+def _apply_api_keys(keys: dict):
+    if keys.get("anthropic"):
+        st.session_state.anthropic_api_key = keys["anthropic"]
+    if keys.get("google"):
+        st.session_state.google_api_keys_raw = keys["google"]
+    if keys.get("suno"):
+        st.session_state.suno_api_key = keys["suno"]
+    if keys.get("fal"):
+        st.session_state.fal_api_key = keys["fal"]
+
 if "api_keys_loaded" not in st.session_state:
-    _saved = load_api_keys()
-    if _saved.get("anthropic"):
-        st.session_state.anthropic_api_key = _saved["anthropic"]
-    if _saved.get("google"):
-        st.session_state.google_api_keys_raw = _saved["google"]
-    if _saved.get("suno"):
-        st.session_state.suno_api_key = _saved["suno"]
-    if _saved.get("fal"):
-        st.session_state.fal_api_key = _saved["fal"]
+    _user = st.session_state.get("user")
+    if _user:
+        _saved = load_user_api_keys(_user["uid"])
+        if not any(_saved.values()):          # Firestore trống → thử cookie
+            _saved = load_api_keys()
+    else:
+        _saved = load_api_keys()
+    _apply_api_keys(_saved)
     st.session_state.api_keys_loaded = True
+
+# Nếu user vừa login (session restore / OAuth) mà keys chưa load từ Firestore
+_cur_user = st.session_state.get("user")
+if _cur_user and not st.session_state.get("user_api_keys_loaded"):
+    _apply_api_keys(load_user_api_keys(_cur_user["uid"]))
+    st.session_state.user_api_keys_loaded = True
 
 # ---------------------------------------------------------------------------
 # Batch size logic
@@ -1082,13 +1098,22 @@ with st.sidebar:
     )
 
     if st.button("💾 Lưu API Keys", use_container_width=True):
-        save_api_keys(
-            st.session_state.get("anthropic_api_key", ""),
-            st.session_state.get("google_api_keys_raw", ""),
-            st.session_state.get("suno_api_key", ""),
-            st.session_state.get("fal_api_key", ""),
-        )
-        st.success("Đã lưu! Lần sau vào app sẽ tự điền.")
+        _k_ant = st.session_state.get("anthropic_api_key", "")
+        _k_gg  = st.session_state.get("google_api_keys_raw", "")
+        _k_suno = st.session_state.get("suno_api_key", "")
+        _k_fal  = st.session_state.get("fal_api_key", "")
+        # Lưu vào Firestore nếu đã đăng nhập
+        _save_user = st.session_state.get("user")
+        if _save_user:
+            try:
+                save_user_api_keys(_save_user["uid"], _k_ant, _k_gg, _k_suno, _k_fal)
+                st.success("✅ Đã lưu vào tài khoản! Tự động điền khi đăng nhập.")
+            except Exception as _se:
+                st.warning(f"Không lưu được vào tài khoản: {_se}")
+        else:
+            # Fallback: lưu cookie khi chưa login
+            save_api_keys(_k_ant, _k_gg, _k_suno, _k_fal)
+            st.success("Đã lưu vào trình duyệt! Đăng nhập để lưu vào tài khoản.")
 
     st.divider()
     st.subheader("🎼 Phong cách âm nhạc")
