@@ -1313,7 +1313,7 @@ def call_claude_single(api_key: str, topic: str, language: str, create_mv: bool,
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=8192,
+        max_tokens=16000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": build_single_prompt(topic, language, create_mv, genre, bpm, style_tags)}],
     )
@@ -1334,7 +1334,7 @@ def call_claude_album(api_key, topic, num_tracks, language, create_mv, status_ct
         )
         msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
+            max_tokens=16000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -1636,7 +1636,7 @@ if generate_btn:
                             topic, num_tracks, 1, num_tracks, language, create_mv, music_genre, g_bpm, g_tags
                         )
                         msg = client.messages.create(
-                            model="claude-sonnet-4-6", max_tokens=8192,
+                            model="claude-sonnet-4-6", max_tokens=16000,
                             system=SYSTEM_PROMPT,
                             messages=[{"role": "user", "content": prompt}],
                         )
