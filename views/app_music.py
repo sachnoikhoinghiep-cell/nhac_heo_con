@@ -346,11 +346,13 @@ GENRE_CONFIG = {
         "bpm": "70-85 BPM",
         "style_tags": "Smooth Jazz, Saxophone Lead, Piano Chords, Lounge Atmosphere, Slow Groovy, Soft Drums",
         "visual_vibe": "Classy vintage bar, rainy night through a window, warm dim lighting, 3D isometric cozy room",
+        "hashtags": "#jazzmusic #smoothjazz #loungemusic #jazzcafe #rainynight #relaxingjazz",
     },
     "Ambient Relax (Meditation)": {
         "bpm": "60 BPM or Floating",
         "style_tags": "Ambient, Healing, Tibetan Bowls, Soft Pads, Deep Sleep, Nature Sounds, No Drums",
         "visual_vibe": "Cosmic nebula, misty morning forest, zen garden, peaceful floating particles, cinematic slow motion",
+        "hashtags": "#relaxingmusic #meditationmusic #deepsleep #ambient #healingsounds #studybgm",
     },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
@@ -1353,6 +1355,14 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                         st.markdown(f"**Scene {i}:** {scene}")
                 else:
                     st.info("Không có dữ liệu cảnh.")
+                if "Relax" in music_genre or music_genre == "Ambient Relax (Meditation)":
+                    st.info(
+                        "💡 **Gợi ý Video 2 – Ambient/Relax:** Sử dụng chuyển động lặp (seamless loop) "
+                        "cực chậm để giữ người xem không bị mất tập trung. Ví dụ: tách trà bốc khói "
+                        "nhẹ, lá cây khẽ lay trong gió, hoặc hạt bụi vàng lơ lửng dưới ánh nắng buổi sáng. "
+                        "Tránh cắt cảnh đột ngột — dùng crossfade mờ dần (dissolve) giữa các shot. "
+                        "Thời lượng lý tưởng: 1–3 giờ (loop video)."
+                    )
 
             with tabs[1]:
                 st.markdown(f"**YouTube Title:** {seo.get('yt_title', '')}")
@@ -1392,6 +1402,25 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                         "**SEO Strategy:** Nhắm từ khóa **'Gym Motivation'**, **'Workout Music'**, "
                         "'Euphoric Hardstyle Mix' — upload khung 05:00–07:00 sáng để bắt đúng "
                         "giờ tập gym buổi sáng của người dùng."
+                    )
+                if music_genre == "Smooth Jazz (Lounge)":
+                    st.info(
+                        "💡 **Gợi ý Thumbnail Jazz:** Dùng tông màu **vàng hổ phách và nâu gỗ** ấm áp. "
+                        "Hình ảnh lý tưởng: góc cafe cổ điển với đèn vàng, ly rượu vang hoặc cà phê bốc khói, "
+                        "cửa sổ mưa đêm thành phố. Tránh màu neon — giữ feel sang trọng, vintage.\n\n"
+                        "**SEO Strategy:** Nhắm từ khóa **'Jazz Cafe Music'**, **'Smooth Jazz for Study'**, "
+                        "'Relaxing Jazz Piano' — upload khung 19:00–22:00 để bắt đối tượng thư giãn buổi tối. "
+                        "Title nên có: 'No Ads' hoặc '1 Hour' để tăng watch time."
+                    )
+                if music_genre == "Ambient Relax (Meditation)":
+                    st.info(
+                        "💡 **Gợi ý Thumbnail Ambient/Meditation:** Dùng palette **xanh ngọc, trắng và tím nhạt**. "
+                        "Hình ảnh: dải ngân hà mềm mại, rừng núi mờ sương bình minh, hoặc mặt hồ phẳng lặng "
+                        "phản chiếu bầu trời. Tuyệt đối không dùng chữ màu đỏ hay hiệu ứng bùng nổ.\n\n"
+                        "**SEO Strategy:** Nhắm từ khóa **'Deep Sleep Music'**, **'Meditation Music'**, "
+                        "'Study BGM', 'Healing Sounds' — upload bất kỳ giờ nào, lưu lượng tìm kiếm đều. "
+                        "Title nên ghi rõ thời lượng (vd: *3 Hours Deep Sleep Music*) để YouTube "
+                        "đề xuất vào danh sách phát tự động ban đêm."
                     )
                 st.divider()
                 st.markdown(f"**BGM Suggestion:** {data.get('bgm_suggestion', '')}")
