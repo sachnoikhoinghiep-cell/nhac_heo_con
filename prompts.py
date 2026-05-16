@@ -81,6 +81,21 @@ Exception: the "visual_prompt" field must ALWAYS be written in English regardles
         [Second Drop: Harder than first — layer distorted 808]
         [Outro: Bass fade, reverb tail]
     - BPM: 128-130, instruments: heavy 808 sub-bass, aggressive synth leads, high-compression kick, sidechain pump, distorted bass layers.
+- IF genre == "Smooth Jazz (Lounge)":
+    - Lyrics: Write in a slow, introspective, poetic narrative style — rich imagery, unhurried phrasing. Alternatively, use "Instrumental Focus" mode: write only 2-3 whispered, intimate lines and let the music breathe. No forced rhyme scheme; prioritize emotional texture over structure.
+    - Sound structure:
+        - [Intro: Rain & Ambience]: Soft patter of rain or gentle clink of glassware — 8 bars of pure atmosphere before any melody enters.
+        - [Verse: Piano & Saxophone]: Smooth piano voicings (jazz chords, walking bass implied), silky saxophone melody weaving over the top. Warm, unhurried delivery.
+        - [Bridge: Saxophone Improvisation]: Free-form saxophone solo — notate as "improvisation, rubato feel, call-and-response with piano". No fixed rhythm, pure expression.
+        - [Outro: Fade to Rain]: Music dissolves back into ambient rain or café ambience.
+    - Visual prompt tone: warm amber and walnut-brown palette, classic café or cozy night study corner, candlelight, vinyl record on a turntable, rain-streaked window, 3D isometric warm interior scene.
+    - BPM: 70-85, instruments: jazz piano (Steinway voicings), tenor/alto saxophone, upright bass (pizzicato), soft brushed drums, ambient rain layer.
+- IF genre == "Ambient Relax (Meditation)":
+    - Lyrics: Pure Instrumental preferred — write NO conventional lyrics. If text is needed, use only short mantras (1-5 syllables), soft humming notation "(hmmm…)", or breathing cues "(breathe in… breathe out…)". Zero narrative, zero rhyme — only sound-like words that deepen the trance state.
+    - Sound structure: Linear and continuous — NO drops, NO sudden peaks, NO builds that create tension. Sound layers enter and exit slowly (crossfade over 16+ bars). Structure markers: [Opening: Silence into Pads], [Layer 1: Tibetan Bowls], [Layer 2: Nature Ambience — water / wind chimes], [Layer 3: Soft Lead Melody — single sustained notes], [Closing: Gradual fade to silence].
+    - No drums, no rhythmic pulse. If percussion exists, it is a single soft Tibetan bowl strike every 8-16 bars — never driving.
+    - Visual prompt tone: teal, white, and soft violet palette — misty mountain forest at dawn, cosmic nebula with soft galaxy ribbons, zen stone garden with shallow water reflections, peaceful slow-motion particles drifting. Cinematic wide shot, no sharp edges, everything slightly out of focus.
+    - BPM: 60 or free-floating (no fixed tempo), instruments: Tibetan singing bowls, atmospheric pads (long sustained chords), nature sounds (rain / stream / wind), soft piano single notes, binaural-style drone layer.
 
 # Output Format for SINGLE track (n=1):
 {
