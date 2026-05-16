@@ -14,6 +14,14 @@ _COOKIE_DAYS = 30
 def _cookie_mgr():
     return stx.CookieManager(key="nhacheocon_cm")
 
+def _ctx_cookie(name: str) -> str:
+    """Đọc cookie từ HTTP request headers — hoạt động ngay lần render đầu tiên.
+    st.context.cookies khả dụng từ Streamlit 1.37+."""
+    try:
+        return st.context.cookies.get(name, "") or ""
+    except Exception:
+        return ""
+
 def _save_rt(refresh_token: str):
     try:
         _cookie_mgr().set(
@@ -24,6 +32,10 @@ def _save_rt(refresh_token: str):
         pass
 
 def _load_rt() -> str:
+    # st.context.cookies đọc trực tiếp từ HTTP header — không cần React init
+    val = _ctx_cookie(_COOKIE_KEY)
+    if val:
+        return val
     try:
         return _cookie_mgr().get(_COOKIE_KEY) or ""
     except Exception:
@@ -55,7 +67,7 @@ def save_api_keys(anthropic: str, google: str, suno: str, fal: str = ""):
 def load_api_keys() -> dict:
     """Đọc API keys từ cookie."""
     try:
-        raw = _cookie_mgr().get(_APIKEY_COOKIE) or ""
+        raw = _ctx_cookie(_APIKEY_COOKIE) or _cookie_mgr().get(_APIKEY_COOKIE) or ""
         if raw:
             d = json.loads(raw)
             return {
@@ -102,7 +114,7 @@ def save_presets(presets: list):
 
 def load_presets() -> list:
     try:
-        raw = _cookie_mgr().get(_PRESETS_COOKIE) or "[]"
+        raw = _ctx_cookie(_PRESETS_COOKIE) or _cookie_mgr().get(_PRESETS_COOKIE) or "[]"
         return json.loads(raw)
     except Exception:
         return []
