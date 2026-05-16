@@ -1799,7 +1799,6 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
                     # Nút điền thẳng vào ô chủ đề
                     if st.button(f"➕ Dùng chủ đề này", key=f"use_topic_{_score}_{_tp.get('topic','')[:10]}",
                                  use_container_width=True):
-                        st.session_state.topic_input   = _tp.get("topic", "")
                         st.session_state.pending_topic = _tp.get("topic", "")
                         st.rerun()
                     st.divider()
