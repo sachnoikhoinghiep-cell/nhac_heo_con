@@ -686,7 +686,7 @@ def suno_poll_with_ui(api_key: str, task_id: str,
 
 def run_suno_generation(title: str, style: str, lyrics: str, track_key: str):
     suno_key = st.session_state.get("suno_api_key", "").strip()
-    model    = st.session_state.get("suno_model", "V4_5")
+    model    = st.session_state.get("suno_model", "V5_5")
 
     if not suno_key:
         st.warning("Nhập Suno API Key ở sidebar.")
@@ -748,7 +748,7 @@ def generate_all_tracks(items: list, max_workers: int = 5):
     from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
 
     suno_key = st.session_state.get("suno_api_key", "").strip()
-    model    = st.session_state.get("suno_model", "V4_5")
+    model    = st.session_state.get("suno_model", "V5_5")
     if not suno_key:
         st.warning("Nhập Suno API Key ở sidebar.")
         return
@@ -1063,9 +1063,9 @@ with st.sidebar:
     )
     st.selectbox(
         "Suno Model:",
-        ["V4_5", "V4_5PLUS", "V5", "V4", "V5_5"],
+        ["V5_5", "V5", "V4_5PLUS", "V4_5", "V4"],
         key="suno_model",
-        help="V4_5/V5: up to 8 phút | V4: up to 4 phút",
+        help="V5_5/V5: up to 8 phút | V4: up to 4 phút",
     )
 
     # Suno credit — sunoapi.org does not expose a credit API endpoint
@@ -1163,7 +1163,7 @@ with st.sidebar:
                 st.session_state.language_select   = _p.get("language", "Tiếng Việt")
                 st.session_state.num_tracks        = int(_p.get("num_tracks", 10))
                 st.session_state.create_mv_check   = bool(_p.get("create_mv", False))
-                st.session_state.suno_model        = _p.get("suno_model", "V4_5")
+                st.session_state.suno_model        = _p.get("suno_model", "V5_5")
                 st.rerun()
             if _pd.button("🗑️ Xóa", use_container_width=True, key="preset_delete"):
                 save_presets([p for p in _presets if p["name"] != _sel])
@@ -1181,7 +1181,7 @@ with st.sidebar:
                 "num_tracks": int(st.session_state.get("num_tracks", 10)),
                 "language":   st.session_state.get("language_select", "Tiếng Việt"),
                 "create_mv":  bool(st.session_state.get("create_mv_check", False)),
-                "suno_model": st.session_state.get("suno_model", "V4_5"),
+                "suno_model": st.session_state.get("suno_model", "V5_5"),
             }
             _updated = [p for p in _presets if p["name"] != _new["name"]] + [_new]
             save_presets(_updated)
