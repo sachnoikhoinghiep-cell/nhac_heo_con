@@ -97,21 +97,20 @@ Exception: the "visual_prompt" field must ALWAYS be written in English regardles
     - Visual prompt tone: teal, white, and soft violet palette — misty mountain forest at dawn, cosmic nebula with soft galaxy ribbons, zen stone garden with shallow water reflections, peaceful slow-motion particles drifting. Cinematic wide shot, no sharp edges, everything slightly out of focus.
     - BPM: 60 or free-floating (no fixed tempo), instruments: Tibetan singing bowls, atmospheric pads (long sustained chords), nature sounds (rain / stream / wind), soft piano single notes, binaural-style drone layer.
 - IF genre == "Hòa tấu Trung Hoa":
-    - Lyrics: Instrumental-first — write NO pop lyrics. If vocal is needed, use Classical Chinese poetry fragments (7-character lines, Tang/Song dynasty style) or wordless vocal humming (「唔…啊…」notation). Never write modern conversational text. One short poem stanza maximum per section.
-    - Pentatonic scale MANDATORY: all melodies must stay strictly within the pentatonic scale (宫商角徵羽 — do re mi sol la). No chromatic notes, no Western chord progressions. Harmony must feel ancient and modal, not modern.
+    - Lyrics: Default is Pure Instrumental — write NO conventional lyrics. If vocal text is requested, write ONLY short classical-style poetry using imagery of: moon, water, clouds, wind, tea, sword (trăng, nước, mây, gió, trà, kiếm). Deliver as whispered recitation or soft poetry chanting (whispering voice / ngâm thơ). Maximum one 4-line stanza per section. Never write modern conversational sentences.
+    - Pentatonic scale MANDATORY: all melodies must stay strictly within the pentatonic scale (宫商角徵羽 — do re mi sol la). No chromatic notes, no Western chord progressions. Every instrument must feel ancient, modal, and timeless.
     - Sound structure:
-        - [序曲 Opening]: Guzheng solo — single plucked notes rippling slowly, establishing the pentatonic mood. 8-16 bars, silence between notes intentional.
-        - [主题 Main Theme]: Dizi flute carries the primary melody, Guzheng provides harmonic arpeggio underpinning. Erhu enters as a secondary voice — weaving, bending notes expressively.
-        - [转 Development]: Pipa enters with a rhythmic interjection — short staccato plucks contrasting the smooth Erhu legato. Dynamic tension without a "drop".
-        - [合 Resolution]: All four instruments in unison melody — brief, glorious, then peeling back one by one to silence.
-        - [尾声 Outro]: Guzheng alone again — mirror of the opening. Fade with reverb tail.
-    - Instrument roles (specify clearly in music_style):
-        - Guzheng (古筝): harmonic foundation, arpeggios, glissando ornaments.
-        - Dizi (笛子): primary melodic lead, breathy tone, pure and clear.
-        - Pipa (琵琶): rhythmic accent, percussive plucks, occasional melodic fills.
-        - Erhu (二胡): emotional voice, legato phrases, subtle pitch bends (portamento).
-    - Visual prompt tone: Song dynasty ink-wash landscape (水墨画), mist-shrouded peaks, a solitary pavilion by a mountain river, peach blossom petals drifting on water, bamboo forest with shafts of morning light, ink-brush stroke aesthetic, muted jade-green and ink-grey palette.
-    - BPM: 65-80 (or rub a to for solo sections), instruments: Guzheng, Dizi, Pipa, Erhu, light frame drum (optional — only if rhythmic section needed), natural reverb / room ambience.
+        - [Intro]: Flowing water sound (róc rách) layered with soft Guzheng (Đàn Tranh) arpeggios — gentle glissando ripples, sparse and unhurried. Establishes space and stillness before melody enters.
+        - [Verse]: Dizi flute (Sáo Trúc) carries the primary melody — long, soaring phrases that evoke vast open landscapes, misty mountains, and boundless sky. Guzheng continues as a soft harmonic cushion beneath.
+        - [Chorus]: Erhu (Nhị) and Pipa (Tỳ Bà) interweave — Erhu's bowed legato sighs push emotional peak while Pipa's plucked accents add rhythmic tension. The combination is intensely expressive yet maintains elegance and restraint (thanh tao). No aggressive crescendo — emotion rises like incense smoke, not a wave crash.
+        - [Outro]: Wind chimes (chuông gió) enter softly, instruments fade one by one. Final note: single Guzheng pluck, then silence.
+    - Instrument roles (always specify in music_style field):
+        - Guzheng (古筝 / Đàn Tranh): harmonic foundation, flowing arpeggios, glissando ornaments, gentle tremolo.
+        - Dizi (笛子 / Sáo Trúc): primary melodic lead — breathy, pure, spacious tone. Carries the "soul" of the piece.
+        - Erhu (二胡 / Nhị): emotional voice — bowed legato, subtle portamento pitch bends, deeply expressive.
+        - Pipa (琵琶 / Tỳ Bà): rhythmic accent and color — staccato plucks, occasional melodic fills, bridges lyrical and rhythmic roles.
+    - Visual prompt tone (Nano Banana): ink-wash painting style (thủy mặc / 水墨画) OR 3D isometric ancient Chinese scene. Preferred settings: misty bamboo forest (rừng trúc mờ sương), candlelit scholar's study beside a latticed window (thư phòng cổ kính), or a lone swordsman standing beneath a falling peach blossom tree (kiếm khách dưới gốc đào). Palette: ink-grey, jade-green, soft gold, mist-white. No saturated modern colors.
+    - BPM: 65-80 (rubato allowed for solo passages), instruments: Guzheng, Dizi, Pipa, Erhu, wind chimes, flowing water ambience, natural room reverb. No electronic elements.
 
 # Output Format for SINGLE track (n=1):
 {
