@@ -354,6 +354,12 @@ GENRE_CONFIG = {
         "visual_vibe": "Cosmic nebula, misty morning forest, zen garden, peaceful floating particles, cinematic slow motion",
         "hashtags": "#relaxingmusic #meditationmusic #deepsleep #ambient #healingsounds #studybgm",
     },
+    "Hòa tấu Trung Hoa": {
+        "bpm": "65-80 BPM",
+        "style_tags": "Chinese Traditional Instrumental, Guzheng Lead, Dizi Flute, Pipa, Erhu, Pentatonic Scale, Ancient Wuxia Melody, Cinematic Chill",
+        "visual_vibe": "Ancient Chinese landscape painting, misty mountains and rivers, traditional tea house, bamboo forest, falling peach blossoms, ethereal lo-fi lighting",
+        "hashtags": "#guzheng #chinesemusic #hoatautrungboa #nhactrungboa #erhu #wuxiamusic #asianrelax #traditionalmusic",
+    },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
 
@@ -1421,6 +1427,18 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                         "'Study BGM', 'Healing Sounds' — upload bất kỳ giờ nào, lưu lượng tìm kiếm đều. "
                         "Title nên ghi rõ thời lượng (vd: *3 Hours Deep Sleep Music*) để YouTube "
                         "đề xuất vào danh sách phát tự động ban đêm."
+                    )
+                if music_genre == "Hòa tấu Trung Hoa":
+                    st.info(
+                        "💡 **Gợi ý Thumbnail Hòa tấu Trung Hoa:** Dùng phong cách **tranh thủy mặc** (水墨画) — "
+                        "núi non mờ sương, đình cổ bên sông, hoa đào rụng trên mặt nước. "
+                        "Palette: xanh ngọc bích, xám mực tàu, trắng sữa. Font chữ nên dùng kiểu thư pháp "
+                        "Hán tự hoặc Việt ngữ mảnh thanh lịch.\n\n"
+                        "**SEO Strategy:** Nhắm đồng thời hai thị trường: "
+                        "**'Guzheng Music'**, **'Chinese Traditional Music'**, 'Wuxia OST', 'Asian Relax Music' (tiếng Anh) "
+                        "và **'Nhạc Trung Hoa'**, 'Nhạc Cổ Trang', 'Đàn Tranh' (tiếng Việt). "
+                        "Upload khung 20:00–23:00. Title nên có tên nhạc cụ nổi bật: "
+                        "*Guzheng & Erhu – Ancient Chinese Music for Study/Relax 2026*."
                     )
                 st.divider()
                 st.markdown(f"**BGM Suggestion:** {data.get('bgm_suggestion', '')}")
