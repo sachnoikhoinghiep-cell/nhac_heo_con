@@ -358,7 +358,7 @@ GENRE_CONFIG = {
         "bpm": "65-80 BPM",
         "style_tags": "Chinese Traditional Instrumental, Guzheng Lead, Dizi Flute, Pipa, Erhu, Pentatonic Scale, Ancient Wuxia Melody, Cinematic Chill",
         "visual_vibe": "Ancient Chinese landscape painting, misty mountains and rivers, traditional tea house, bamboo forest, falling peach blossoms, ethereal lo-fi lighting",
-        "hashtags": "#guzheng #chinesemusic #hoatautrungboa #nhactrungboa #erhu #wuxiamusic #asianrelax #traditionalmusic",
+        "hashtags": "#chinesemusic #traditionalinstruments #guzheng #dizi #guzhengchill #guzhengmeditation #nhaccotrong",
     },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
@@ -1368,6 +1368,18 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                         "nhẹ, lá cây khẽ lay trong gió, hoặc hạt bụi vàng lơ lửng dưới ánh nắng buổi sáng. "
                         "Tránh cắt cảnh đột ngột — dùng crossfade mờ dần (dissolve) giữa các shot. "
                         "Thời lượng lý tưởng: 1–3 giờ (loop video)."
+                    )
+                if music_genre == "Hòa tấu Trung Hoa":
+                    st.info(
+                        "💡 **Gợi ý Visual (Video 2) – Hòa tấu Trung Hoa:** Dùng slow-motion loop liền mạch "
+                        "(seamless loop) mang phong cách thủy mặc cổ trang:\n"
+                        "- 🌸 Cánh hoa đào khẽ rơi trên mặt nước tạo gợn sóng lăn tăn\n"
+                        "- 🕯️ Làn khói trầm hương tỏa nhẹ từ lư hương trong thư phòng\n"
+                        "- 💧 Giọt sương rơi xuống hồ tĩnh lặng — vòng sóng loang rồi tan\n\n"
+                        "Tất cả shot dùng tông màu mực tàu, xanh ngọc, vàng nhạt. "
+                        "Crossfade dissolve giữa các cảnh, không cắt cứng. "
+                        "Thêm lớp hạt nhiễu film (grain) để tạo cảm giác cổ điển. "
+                        "Thời lượng lý tưởng: 1–2 giờ (loop)."
                     )
 
             with tabs[1]:
