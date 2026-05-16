@@ -310,3 +310,35 @@ Apply the GENRE-SPECIFIC LOGIC for "{genre}".
 Generate ONLY tracks {batch_start}–{batch_end}. Each track must have: title, music_style, full lyrics.
 Return the ALBUM CONTINUATION BATCH format JSON with exactly {batch_end - batch_start + 1} tracks in the "tracks" array.
 """
+
+
+def build_topic_suggestion_prompt(keywords: list, genre: str, language: str) -> str:
+    kw_str = ", ".join(f'"{k}"' for k in keywords)
+    return f"""You are a YouTube content strategist specializing in {genre} music.
+
+Selected trending keywords: {kw_str}
+Genre: {genre}
+Target market language: {language}
+
+Based on these keywords, suggest exactly 5 hot YouTube content topics for {genre} music videos.
+Each topic should be specific enough to serve directly as a song title or album concept.
+
+For each topic assign a potential score 1–10:
+- 10 = highest potential (high search volume, low competition, strong trending momentum)
+- 1  = lowest potential
+
+Return ONLY valid JSON array, no markdown, no explanation:
+[
+  {{"topic": "...", "score": 10, "reason": "One sentence: why this ranks highest"}},
+  {{"topic": "...", "score": 8,  "reason": "..."}},
+  {{"topic": "...", "score": 7,  "reason": "..."}},
+  {{"topic": "...", "score": 5,  "reason": "..."}},
+  {{"topic": "...", "score": 3,  "reason": "..."}}
+]
+
+Rules:
+- All text (topic, reason) must be in {language}
+- Topics must be specific, vivid, and optimized for YouTube search
+- Sort the array by score descending (highest first)
+- Scores must be distinct integers between 1 and 10
+"""

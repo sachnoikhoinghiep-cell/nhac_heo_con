@@ -8,6 +8,7 @@ from auth import (
     save_presets, load_presets,
     update_history_suno,
 )
+
 import requests
 import json
 import io
@@ -21,6 +22,7 @@ from prompts import (
     build_album_continuation_prompt,
     build_video_script_prompt,
     build_keyword_prompt,
+    build_topic_suggestion_prompt,
 )
 
 # ---------------------------------------------------------------------------
@@ -161,6 +163,7 @@ for _k, _v in {
     "suno_failed": {},        # track_key -> error message
     "video_scripts": {},      # track_key -> script text
     "keyword_result": None,   # trending keyword lookup result
+    "kw_topic_results": [],   # topic suggestions from selected keywords
     "current_history_id": None,  # Firestore doc id for Suno URL updates
     "suno_credits": None,        # cached credit balance from sunoapi.org
     "fal_videos": {},            # scene_key -> video URL
@@ -1734,15 +1737,72 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
 
         with kt1:
             hot = kw.get("hot_keywords", [])
+            st.caption("Tích chọn từ khóa muốn dùng rồi nhấn **Gợi ý chủ đề**:")
             cols = st.columns(3)
             for idx, kw_item in enumerate(hot):
-                cols[idx % 3].markdown(f"`{kw_item}`")
+                cols[idx % 3].checkbox(kw_item, key=f"kw_chk_{idx}")
+
             tips = kw.get("tips", [])
             if tips:
                 st.divider()
                 st.markdown("**💡 SEO Tips:**")
                 for tip in tips:
                     st.markdown(f"- {tip}")
+
+            st.divider()
+            _selected_kws = [
+                kw.get("hot_keywords", [])[i]
+                for i in range(len(kw.get("hot_keywords", [])))
+                if st.session_state.get(f"kw_chk_{i}", False)
+            ]
+            _topic_api = st.session_state.get("anthropic_api_key", "").strip()
+            _suggest_disabled = not _selected_kws or not _topic_api
+            _suggest_label = (
+                f"💡 Gợi ý 5 chủ đề hot từ {len(_selected_kws)} từ khóa đã chọn"
+                if _selected_kws else "💡 Gợi ý 5 chủ đề hot (chọn ít nhất 1 từ khóa)"
+            )
+            if st.button(_suggest_label, key="kw_suggest_btn",
+                         use_container_width=True, disabled=_suggest_disabled):
+                with st.spinner("Claude đang phân tích chủ đề tiềm năng…"):
+                    try:
+                        _tp_prompt = build_topic_suggestion_prompt(
+                            _selected_kws, kw_genre, kw_lang
+                        )
+                        _tp_client = anthropic.Anthropic(api_key=_topic_api)
+                        _tp_msg = _tp_client.messages.create(
+                            model="claude-haiku-4-5-20251001",
+                            max_tokens=1024,
+                            messages=[{"role": "user", "content": _tp_prompt}],
+                        )
+                        _tp_raw = _tp_msg.content[0].text.strip()
+                        if _tp_raw.startswith("```"):
+                            _tp_raw = _tp_raw.split("```", 2)[1]
+                            if _tp_raw.startswith("json"):
+                                _tp_raw = _tp_raw[4:]
+                            _tp_raw = _tp_raw.strip()
+                        _topics = json.loads(_fix_control_chars(_tp_raw))
+                        # đảm bảo sort đúng score giảm dần
+                        _topics.sort(key=lambda x: x.get("score", 0), reverse=True)
+                        st.session_state.kw_topic_results = _topics
+                    except Exception as _tp_e:
+                        st.error(f"Lỗi gợi ý chủ đề: {_tp_e}")
+
+            # Hiển thị kết quả chủ đề
+            if st.session_state.kw_topic_results:
+                st.markdown("#### 🎯 Chủ đề tiềm năng (cao → thấp)")
+                for _tp in st.session_state.kw_topic_results:
+                    _score = _tp.get("score", 0)
+                    _bar   = "🟩" * _score + "⬜" * (10 - _score)
+                    _tc1, _tc2 = st.columns([0.85, 0.15])
+                    _tc1.markdown(f"**{_tp.get('topic','')}**  \n_{_tp.get('reason','')}_")
+                    _tc2.markdown(f"**{_score}/10**  \n{_bar}")
+                    # Nút điền thẳng vào ô chủ đề
+                    if st.button(f"➕ Dùng chủ đề này", key=f"use_topic_{_score}_{_tp.get('topic','')[:10]}",
+                                 use_container_width=True):
+                        st.session_state.topic_input   = _tp.get("topic", "")
+                        st.session_state.pending_topic = _tp.get("topic", "")
+                        st.rerun()
+                    st.divider()
 
         with kt2:
             for phrase in kw.get("long_tail", []):
@@ -1760,6 +1820,7 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
 
         if st.button("🗑️ Xóa kết quả", key="kw_clear_btn"):
             st.session_state.keyword_result = None
+            st.session_state.kw_topic_results = []
             st.rerun()
 
 
