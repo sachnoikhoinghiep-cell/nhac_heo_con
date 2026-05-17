@@ -1306,7 +1306,25 @@ def parse_json(raw: str) -> dict:
         raw = raw.split("```json")[1].split("```")[0].strip()
     elif "```" in raw:
         raw = raw.split("```")[1].split("```")[0].strip()
-    return json.loads(_fix_control_chars(raw))
+
+    cleaned = _fix_control_chars(raw)
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: json_repair xử lý quote không escape và lỗi cú pháp phổ biến
+    try:
+        from json_repair import repair_json
+        repaired = repair_json(cleaned, return_objects=True)
+        if isinstance(repaired, dict):
+            return repaired
+    except Exception:
+        pass
+
+    # Re-raise gốc để caller hiển thị lỗi
+    return json.loads(cleaned)
 
 # ---------------------------------------------------------------------------
 # Claude API calls
