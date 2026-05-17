@@ -1676,6 +1676,7 @@ if generate_btn:
             st.session_state.suno_audio = {}
             st.session_state.suno_failed = {}
             st.session_state.video_scripts = {}
+            st.rerun()
 
         except json.JSONDecodeError as e:
             st.error(f"Lỗi phân tích JSON từ Claude: {e}")
@@ -1683,6 +1684,8 @@ if generate_btn:
             st.error("Anthropic API Key không hợp lệ.")
         except anthropic.APIError as e:
             st.error(f"Lỗi Anthropic API: {e}")
+        except Exception as e:
+            st.error(f"Lỗi không xác định: {e}")
 
 # ---------------------------------------------------------------------------
 # Trending Keywords tool (độc lập với music generation)
@@ -1793,14 +1796,14 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
             # Hiển thị kết quả chủ đề
             if st.session_state.kw_topic_results:
                 st.markdown("#### 🎯 Chủ đề tiềm năng (cao → thấp)")
-                for _tp in st.session_state.kw_topic_results:
+                for _tidx, _tp in enumerate(st.session_state.kw_topic_results):
                     _score = _tp.get("score", 0)
                     _bar   = "🟩" * _score + "⬜" * (10 - _score)
                     _tc1, _tc2 = st.columns([0.85, 0.15])
                     _tc1.markdown(f"**{_tp.get('topic','')}**  \n_{_tp.get('reason','')}_")
                     _tc2.markdown(f"**{_score}/10**  \n{_bar}")
                     # Nút điền thẳng vào ô chủ đề
-                    if st.button(f"➕ Dùng chủ đề này", key=f"use_topic_{_score}_{_tp.get('topic','')[:10]}",
+                    if st.button(f"➕ Dùng chủ đề này", key=f"use_topic_{_tidx}",
                                  use_container_width=True):
                         st.session_state.pending_topic = _tp.get("topic", "")
                         st.rerun()
