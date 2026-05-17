@@ -8,8 +8,19 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Navigation phải được khởi tạo TRƯỚC st.switch_page để page registry tồn tại
+pg = st.navigation(
+    [
+        st.Page("views/home.py",       title="Trang chủ",  icon="🏠", default=True),
+        st.Page("views/app_music.py",  title="Ứng dụng",   icon="🎵"),
+        st.Page("views/about.py",      title="Giới thiệu", icon="ℹ️"),
+        st.Page("views/guide.py",      title="Hướng dẫn",  icon="📋"),
+        st.Page("views/policy.py",     title="Chính sách", icon="📜"),
+    ],
+    position="hidden",
+)
+
 # Ghi pending refresh token (từ OAuth callback render trước) vào cookie
-# Phải gọi trước try_restore_session để cookie sẵn sàng cho lần load tiếp theo
 process_pending_rt()
 
 # Session restore từ cookie (chạy trên mọi trang)
@@ -58,15 +69,4 @@ elif st.query_params.get("ba_token") and not _pp_sub_id:
     st.query_params.clear()
     st.warning("Bạn đã hủy đăng ký PayPal.")
 
-# Navigation
-pg = st.navigation(
-    [
-        st.Page("views/home.py",       title="Trang chủ",  icon="🏠", default=True),
-        st.Page("views/app_music.py",  title="Ứng dụng",   icon="🎵"),
-        st.Page("views/about.py",      title="Giới thiệu", icon="ℹ️"),
-        st.Page("views/guide.py",      title="Hướng dẫn",  icon="📋"),
-        st.Page("views/policy.py",     title="Chính sách", icon="📜"),
-    ],
-    position="hidden",
-)
 pg.run()
