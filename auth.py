@@ -23,23 +23,26 @@ def _ctx_cookie(name: str) -> str:
         return ""
 
 def _save_rt(refresh_token: str):
-    try:
-        _cookie_mgr().set(
-            _COOKIE_KEY, refresh_token,
-            expires_at=datetime.now() + timedelta(days=_COOKIE_DAYS),
-        )
-    except Exception:
-        pass
+    # Lưu tạm vào session_state; process_pending_rt() trong app.py sẽ ghi cookie
+    # sau khi CookieManager được render đầy đủ (tránh race với st.switch_page)
+    st.session_state["_pending_rt"] = refresh_token
 
 def _load_rt() -> str:
-    # st.context.cookies đọc trực tiếp từ HTTP header — không cần React init
-    val = _ctx_cookie(_COOKIE_KEY)
-    if val:
-        return val
-    try:
-        return _cookie_mgr().get(_COOKIE_KEY) or ""
-    except Exception:
-        return ""
+    # Đọc trực tiếp từ HTTP Cookie header — synchronous, không cần React init
+    return _ctx_cookie(_COOKIE_KEY) or ""
+
+def process_pending_rt():
+    """Gọi ở đầu app.py mỗi render để ghi pending refresh token vào cookie.
+    Tách khỏi handle_google_callback để tránh race condition với st.switch_page."""
+    pending = st.session_state.pop("_pending_rt", None)
+    if pending:
+        try:
+            _cookie_mgr().set(
+                _COOKIE_KEY, pending,
+                expires_at=datetime.now() + timedelta(days=_COOKIE_DAYS),
+            )
+        except Exception:
+            pass
 
 def _clear_rt():
     try:

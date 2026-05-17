@@ -1,5 +1,5 @@
 import streamlit as st
-from auth import try_restore_session, handle_google_callback
+from auth import try_restore_session, handle_google_callback, process_pending_rt
 
 st.set_page_config(
     page_title="nhacheocon — AI Music Producer",
@@ -7,6 +7,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# Ghi pending refresh token (từ OAuth callback render trước) vào cookie
+# Phải gọi trước try_restore_session để cookie sẵn sàng cho lần load tiếp theo
+process_pending_rt()
 
 # Session restore từ cookie (chạy trên mọi trang)
 if "user" not in st.session_state:
