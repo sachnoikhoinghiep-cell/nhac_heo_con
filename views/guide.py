@@ -35,14 +35,12 @@ with st.expander("**Bước 2 — Chuẩn bị API Keys**", expanded=True):
 """)
 
         st.markdown("""
-**🖼️ Google Gemini API** — tạo ảnh thumbnail
-1. Vào [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
-2. Đăng nhập bằng Google
-3. Nhấn **Create API Key**
-4. Copy key bắt đầu bằng `AIzaSy...`
-5. Dán vào ô **Google API Keys** ở sidebar (mỗi key 1 dòng, nhập nhiều key để tránh hết quota)
+**🖼️ fal.ai API** — tạo ảnh thumbnail *(dùng chung key với Video bên dưới)*
+- Dùng model **Nano Banana Pro** (fal-ai/nano-banana-pro)
+- Tạo ảnh thumbnail YouTube 16:9 chất lượng cao
+- Key fal.ai dùng chung cho cả ảnh và video — chỉ cần nhập 1 lần
 
-> Free tier: rất rộng rãi, đủ dùng cho cả ngày.
+> Xem hướng dẫn lấy fal.ai key ở cột bên phải.
 """)
 
     with ak2:
@@ -108,7 +106,7 @@ with c1:
     """)
     st.markdown("### 🖼️ Ảnh Thumbnail")
     st.markdown("""
-    - Dùng **Google API Keys** nhiều key để tránh hết quota
+    - Dùng **fal.ai API Key** (Nano Banana Pro model)
     - Nhấn **🔄 Tạo lại ảnh** nếu kết quả chưa ưng
     - Tải ảnh PNG và chỉnh thêm text bằng Canva nếu cần
     """)
@@ -143,8 +141,8 @@ faqs = [
      "Tối đa 20 bài/lần. Với album >10 bài, Claude sẽ tự chia batch để đảm bảo chất lượng."),
     ("Lịch sử tạo nhạc lưu bao lâu?",
      "72 giờ kể từ khi tạo. Sau đó tự động xóa. Hãy tải MP3 về máy ngay sau khi tạo."),
-    ("Tại sao Google API báo lỗi quota?",
-     "Gemini API có giới hạn free tier. Nhập nhiều Google API key (mỗi key trên 1 dòng) để xoay vòng và tránh lỗi quota."),
+    ("Tại sao tạo ảnh thumbnail bị lỗi?",
+     "Kiểm tra fal.ai API Key ở sidebar. Nếu hết credit, nạp thêm tại fal.ai/dashboard. Mỗi ảnh tốn khoảng $0.02–0.05 credit."),
     ("Session đăng nhập kéo dài bao lâu?",
      "30 ngày. Sau 30 ngày cần đăng nhập lại bằng Google."),
 ]

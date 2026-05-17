@@ -154,7 +154,6 @@ for _k, _v in {
     "suggested_topics": [],
     "topic_input": "",
     "pending_topic": None,
-    "google_key_idx": 0,
     "music_result": None,
     "music_meta": {},
     "images": {},
@@ -175,8 +174,6 @@ for _k, _v in {
 def _apply_api_keys(keys: dict):
     if keys.get("anthropic"):
         st.session_state.anthropic_api_key = keys["anthropic"]
-    if keys.get("google"):
-        st.session_state.google_api_keys_raw = keys["google"]
     if keys.get("suno"):
         st.session_state.suno_api_key = keys["suno"]
     if keys.get("fal"):
@@ -396,76 +393,44 @@ def compute_batches(num_tracks: int) -> list:
     return batches
 
 # ---------------------------------------------------------------------------
-# Google API key rotation (Nano Banana 2)
+# fal.ai Nano Banana Pro — image generation
 # ---------------------------------------------------------------------------
-def get_google_keys() -> list:
-    raw = st.session_state.get("google_api_keys_raw", "")
-    return [k.strip() for k in raw.splitlines() if k.strip()]
-
-def next_google_key() -> str:
-    keys = get_google_keys()
-    if not keys:
-        raise ValueError("Chưa nhập Google API Key.")
-    idx = st.session_state.google_key_idx % len(keys)
-    st.session_state.google_key_idx = idx + 1
-    return keys[idx]
-
-def generate_image(prompt: str) -> bytes:
-    from google import genai
-    keys = get_google_keys()
-    if not keys:
-        raise ValueError("Chưa nhập Google API Key.")
-
+def generate_image(prompt: str, fal_key: str) -> bytes:
+    """Generate thumbnail via fal-ai/nano-banana-pro, return PNG bytes."""
     full_prompt = (
         f"{prompt}. "
-        "16:9 widescreen landscape format, YouTube-ready. "
-        "Vibrant colors, cinematic lighting, 8K resolution."
+        "YouTube thumbnail, 16:9 widescreen landscape, vibrant colors, "
+        "cinematic lighting, high detail, professional quality."
     )
-
-    # Thử lần lượt tất cả key cho đến khi 1 key thành công
-    last_error = None
-    start_idx = st.session_state.google_key_idx % len(keys)
-
-    for offset in range(len(keys)):
-        idx = (start_idx + offset) % len(keys)
-        api_key = keys[idx]
-        try:
-            client = genai.Client(api_key=api_key)
-            response = client.models.generate_content(
-                model="gemini-3.1-flash-image-preview",
-                contents=[full_prompt],
-            )
-            for part in response.parts:
-                if part.inline_data is not None:
-                    # Cập nhật idx để lần sau bắt đầu từ key tiếp theo
-                    st.session_state.google_key_idx = idx + 1
-                    return part.inline_data.data
-            raise ValueError("Model không trả về ảnh.")
-
-        except Exception as e:
-            err_str = str(e)
-            # Chỉ xoay vòng sang key khác nếu là lỗi quota/rate limit
-            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-                last_error = f"Key #{idx + 1} hết quota: {err_str[:120]}"
-                continue  # thử key tiếp theo
-            # Lỗi khác (400, 401...) → báo ngay, không thử tiếp
-            raise
-
-    raise ValueError(
-        f"Tất cả {len(keys)} Google API key đều hết quota.\n"
-        f"Lỗi cuối: {last_error}"
+    headers = {"Authorization": f"Key {fal_key}", "Content-Type": "application/json"}
+    payload  = {
+        "prompt":        full_prompt,
+        "aspect_ratio":  "16:9",
+        "resolution":    "1K",
+        "output_format": "png",
+        "num_images":    1,
+    }
+    resp = requests.post(
+        "https://fal.run/fal-ai/nano-banana-pro",
+        json=payload, headers=headers, timeout=90,
     )
+    resp.raise_for_status()
+    img_url = resp.json()["images"][0]["url"]
+    img_resp = requests.get(img_url, timeout=30)
+    img_resp.raise_for_status()
+    return img_resp.content
 
 def image_widget(prompt: str, img_key: str):
     st.code(prompt, language="text")
+    fal_key = st.session_state.get("fal_api_key", "").strip()
     has_img = img_key in st.session_state.images
     if st.button("🔄 Tạo lại ảnh" if has_img else "🎨 Tạo ảnh (16:9)", key=f"btn_{img_key}"):
-        if not get_google_keys():
-            st.warning("Nhập ít nhất 1 Google API Key ở sidebar.")
+        if not fal_key:
+            st.warning("Nhập fal.ai API Key ở sidebar để tạo ảnh.")
         else:
-            with st.spinner("Nano Banana 2 đang tạo ảnh 16:9..."):
+            with st.spinner("Nano Banana Pro đang tạo ảnh 16:9..."):
                 try:
-                    st.session_state.images[img_key] = generate_image(prompt)
+                    st.session_state.images[img_key] = generate_image(prompt, fal_key)
                 except Exception as e:
                     st.error(f"Lỗi tạo ảnh: {e}")
     if img_key in st.session_state.images:
@@ -1062,19 +1027,6 @@ with st.sidebar:
     )
     st.caption("[Lấy Anthropic API key](https://console.anthropic.com)")
 
-    st.subheader("🖼️ Google API Keys – Nano Banana 2")
-    st.text_area(
-        "Nhập mỗi key một dòng (xoay vòng credit):",
-        key="google_api_keys_raw",
-        height=90,
-        placeholder="AIzaSy...\nAIzaSy...",
-    )
-    st.caption("[Lấy Google Gemini API key](https://aistudio.google.com/app/apikey)")
-    _gkeys = get_google_keys()
-    if _gkeys:
-        _active = (st.session_state.google_key_idx % len(_gkeys)) + 1
-        st.caption(f"✅ {len(_gkeys)} key | Key #{_active} tiếp theo")
-
     st.subheader("🎵 Suno Music Generation")
     st.text_input(
         "Suno API Key:",
@@ -1094,7 +1046,7 @@ with st.sidebar:
     if st.session_state.get("suno_api_key"):
         st.caption("💳 [Xem credit tại sunoapi.org](https://sunoapi.org/dashboard)")
 
-    st.subheader("🎬 fal.ai Video Generation")
+    st.subheader("🎬🖼️ fal.ai – Video & Ảnh")
     st.text_input(
         "fal.ai API Key:",
         type="password",
@@ -1102,23 +1054,23 @@ with st.sidebar:
         placeholder="fal-...",
     )
     st.caption("[Lấy fal.ai API key](https://fal.ai/dashboard)")
+    st.caption("Dùng cho cả **tạo ảnh thumbnail** (Nano Banana Pro) và **tạo video** (Seedance 2.0)")
 
     if st.button("💾 Lưu API Keys", use_container_width=True):
-        _k_ant = st.session_state.get("anthropic_api_key", "")
-        _k_gg  = st.session_state.get("google_api_keys_raw", "")
+        _k_ant  = st.session_state.get("anthropic_api_key", "")
         _k_suno = st.session_state.get("suno_api_key", "")
         _k_fal  = st.session_state.get("fal_api_key", "")
         # Lưu vào Firestore nếu đã đăng nhập
         _save_user = st.session_state.get("user")
         if _save_user:
             try:
-                save_user_api_keys(_save_user["uid"], _k_ant, _k_gg, _k_suno, _k_fal)
+                save_user_api_keys(_save_user["uid"], _k_ant, "", _k_suno, _k_fal)
                 st.success("✅ Đã lưu vào tài khoản! Tự động điền khi đăng nhập.")
             except Exception as _se:
                 st.warning(f"Không lưu được vào tài khoản: {_se}")
         else:
             # Fallback: lưu cookie khi chưa login
-            save_api_keys(_k_ant, _k_gg, _k_suno, _k_fal)
+            save_api_keys(_k_ant, "", _k_suno, _k_fal)
             st.success("Đã lưu vào trình duyệt! Đăng nhập để lưu vào tài khoản.")
 
     st.divider()
