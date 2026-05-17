@@ -395,53 +395,100 @@ def compute_batches(num_tracks: int) -> list:
 # ---------------------------------------------------------------------------
 # fal.ai Nano Banana Pro — image generation
 # ---------------------------------------------------------------------------
-def generate_image(prompt: str, fal_key: str) -> bytes:
-    """Generate thumbnail via fal-ai/nano-banana-pro, return PNG bytes."""
-    full_prompt = (
-        f"{prompt}. "
-        "YouTube thumbnail, 16:9 widescreen landscape, vibrant colors, "
-        "cinematic lighting, high detail, professional quality."
-    )
+def generate_image(prompt: str, fal_key: str,
+                   aspect_ratio: str = "16:9", resolution: str = "1K",
+                   num_images: int = 1, output_format: str = "png") -> list:
+    """Generate images via fal-ai/nano-banana-pro. Returns list[bytes]."""
     headers = {"Authorization": f"Key {fal_key}", "Content-Type": "application/json"}
     payload  = {
-        "prompt":        full_prompt,
-        "aspect_ratio":  "16:9",
-        "resolution":    "1K",
-        "output_format": "png",
-        "num_images":    1,
+        "prompt":        prompt,
+        "aspect_ratio":  aspect_ratio,
+        "resolution":    resolution,
+        "output_format": output_format,
+        "num_images":    num_images,
     }
     resp = requests.post(
         "https://fal.run/fal-ai/nano-banana-pro",
-        json=payload, headers=headers, timeout=90,
+        json=payload, headers=headers, timeout=120,
     )
     resp.raise_for_status()
-    img_url = resp.json()["images"][0]["url"]
-    img_resp = requests.get(img_url, timeout=30)
-    img_resp.raise_for_status()
-    return img_resp.content
+    results = []
+    for img_obj in resp.json()["images"]:
+        img_resp = requests.get(img_obj["url"], timeout=30)
+        img_resp.raise_for_status()
+        results.append(img_resp.content)
+    return results
+
+_IMG_ASPECT_OPTS  = ["16:9", "1:1", "9:16", "4:3", "3:4", "21:9"]
+_IMG_RES_OPTS     = ["1K", "2K", "4K"]
+_IMG_FORMAT_OPTS  = ["png", "jpeg", "webp"]
+_IMG_MIME         = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp"}
+_IMG_EXT          = {"png": "png",       "jpeg": "jpg",        "webp": "webp"}
 
 def image_widget(prompt: str, img_key: str):
     st.code(prompt, language="text")
     fal_key = st.session_state.get("fal_api_key", "").strip()
-    has_img = img_key in st.session_state.images
-    if st.button("🔄 Tạo lại ảnh" if has_img else "🎨 Tạo ảnh (16:9)", key=f"btn_{img_key}"):
+
+    # ── Thông số render ──────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    aspect_ratio = c1.selectbox(
+        "Aspect Ratio", _IMG_ASPECT_OPTS, index=0, key=f"img_ar_{img_key}"
+    )
+    resolution   = c2.selectbox(
+        "Resolution",   _IMG_RES_OPTS,    index=0, key=f"img_res_{img_key}"
+    )
+    num_images   = c3.number_input(
+        "Số ảnh", min_value=1, max_value=4, value=1, step=1, key=f"img_n_{img_key}"
+    )
+    out_fmt      = c4.selectbox(
+        "Format", _IMG_FORMAT_OPTS, index=0, key=f"img_fmt_{img_key}"
+    )
+
+    # ── Nút tạo ảnh ──────────────────────────────────────────────────────────
+    has_img  = img_key in st.session_state.images
+    btn_lbl  = "🔄 Tạo lại ảnh" if has_img else "🎨 Tạo ảnh"
+    if st.button(btn_lbl, key=f"btn_{img_key}", use_container_width=True):
         if not fal_key:
             st.warning("Nhập fal.ai API Key ở sidebar để tạo ảnh.")
         else:
-            with st.spinner("Nano Banana Pro đang tạo ảnh 16:9..."):
+            with st.spinner(f"Nano Banana Pro đang tạo {num_images} ảnh {aspect_ratio} {resolution}..."):
                 try:
-                    st.session_state.images[img_key] = generate_image(prompt, fal_key)
+                    st.session_state.images[img_key] = generate_image(
+                        prompt, fal_key,
+                        aspect_ratio=aspect_ratio,
+                        resolution=resolution,
+                        num_images=int(num_images),
+                        output_format=out_fmt,
+                    )
                 except Exception as e:
                     st.error(f"Lỗi tạo ảnh: {e}")
+
+    # ── Hiển thị kết quả ─────────────────────────────────────────────────────
     if img_key in st.session_state.images:
-        st.image(st.session_state.images[img_key], use_container_width=True)
-        st.download_button(
-            "⬇️ Tải ảnh PNG",
-            data=st.session_state.images[img_key],
-            file_name=f"{img_key}.png",
-            mime="image/png",
-            key=f"dl_{img_key}",
-        )
+        imgs = st.session_state.images[img_key]
+        mime = _IMG_MIME.get(out_fmt, "image/png")
+        ext  = _IMG_EXT.get(out_fmt, "png")
+        if len(imgs) == 1:
+            st.image(imgs[0], use_container_width=True)
+            st.download_button(
+                f"⬇️ Tải ảnh .{ext}", data=imgs[0],
+                file_name=f"{img_key}.{ext}", mime=mime,
+                key=f"dl_{img_key}_0",
+            )
+        else:
+            # Lưới 2 cột cho 2-4 ảnh
+            for row_start in range(0, len(imgs), 2):
+                row_imgs = imgs[row_start:row_start + 2]
+                cols = st.columns(len(row_imgs))
+                for i, (col, img_bytes) in enumerate(zip(cols, row_imgs)):
+                    idx = row_start + i
+                    with col:
+                        st.image(img_bytes, use_container_width=True)
+                        st.download_button(
+                            f"⬇️ Ảnh {idx + 1} .{ext}", data=img_bytes,
+                            file_name=f"{img_key}_{idx + 1}.{ext}", mime=mime,
+                            key=f"dl_{img_key}_{idx}",
+                        )
 
 # ---------------------------------------------------------------------------
 # fal.ai Video generation
