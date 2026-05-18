@@ -1,5 +1,5 @@
 import streamlit as st
-from auth import try_restore_session, handle_google_callback, process_pending_rt
+from auth import try_restore_session, handle_google_callback, process_pending_rt, is_admin
 
 st.set_page_config(
     page_title="nhacheocon — AI Music Producer",
@@ -8,32 +8,40 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Navigation phải được khởi tạo TRƯỚC st.switch_page để page registry tồn tại
-pg = st.navigation(
-    [
-        st.Page("views/home.py",       title="Trang chủ",  icon="🏠", default=True),
-        st.Page("views/app_music.py",  title="Ứng dụng",   icon="🎵"),
-        st.Page("views/about.py",      title="Giới thiệu", icon="ℹ️"),
-        st.Page("views/guide.py",      title="Hướng dẫn",  icon="📋"),
-        st.Page("views/policy.py",     title="Chính sách", icon="📜"),
-    ],
-    position="hidden",
-)
-
-# Ghi pending refresh token (từ OAuth callback render trước) vào cookie
+# 1. Ghi pending refresh token vào cookie (trước session restore)
 process_pending_rt()
 
-# Session restore từ cookie (chạy trên mọi trang)
+# 2. Khôi phục session từ cookie (cần biết user trước khi build navigation)
 if "user" not in st.session_state:
     st.session_state.user = None
 try_restore_session()
 
-# Xử lý Google OAuth callback (?code=...) — redirect về app sau khi login
+# 3. Kiểm tra quyền admin (cache trong session_state)
+_user = st.session_state.get("user")
+if _user and "is_admin" not in st.session_state:
+    st.session_state["is_admin"] = is_admin(_user["uid"])
+elif not _user:
+    st.session_state["is_admin"] = False
+
+# 4. Xây dựng navigation (phải trước st.switch_page)
+_pages = [
+    st.Page("views/home.py",           title="Trang chủ",   icon="🏠", default=True),
+    st.Page("views/app_music.py",      title="Ứng dụng",    icon="🎵"),
+    st.Page("views/user_dashboard.py", title="Tài khoản",   icon="👤"),
+    st.Page("views/about.py",          title="Giới thiệu",  icon="ℹ️"),
+    st.Page("views/guide.py",          title="Hướng dẫn",   icon="📋"),
+    st.Page("views/policy.py",         title="Chính sách",  icon="📜"),
+]
+if st.session_state.get("is_admin"):
+    _pages.append(st.Page("views/admin.py", title="Quản trị", icon="⚙️"))
+
+pg = st.navigation(_pages, position="hidden")
+
+# 5. Xử lý Google OAuth callback (?code=...) — redirect về app sau khi login
 if handle_google_callback():
     st.switch_page("views/app_music.py")
 
-# Xử lý PayPal subscription callback (?subscription_id=...) ở đây
-# để mọi trang đều bắt được callback từ PayPal redirect về root URL
+# 6. Xử lý PayPal subscription callback (?subscription_id=...)
 _pp_sub_id = st.query_params.get("subscription_id")
 if _pp_sub_id and st.session_state.get("user"):
     st.query_params.clear()

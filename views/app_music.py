@@ -8,6 +8,9 @@ from auth import (
     save_presets, load_presets,
     update_history_suno,
 )
+from views._nav import render as nav
+
+nav()
 
 import requests
 import json
@@ -74,6 +77,8 @@ if not st.session_state.user:
     with col_m:
         show_auth_ui()
         st.divider()
+        st.page_link("views/home.py", label="🏠 Về trang chủ",
+                     use_container_width=True)
         st.page_link("views/home.py", label="💰 Xem bảng giá & gói dịch vụ",
                      use_container_width=True)
         st.page_link("views/guide.py", label="📋 Xem hướng dẫn sử dụng",

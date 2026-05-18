@@ -32,8 +32,17 @@ def _load_rt() -> str:
     return _ctx_cookie(_COOKIE_KEY) or ""
 
 def process_pending_rt():
-    """Gọi ở đầu app.py mỗi render để ghi pending refresh token vào cookie.
-    Tách khỏi handle_google_callback để tránh race condition với st.switch_page."""
+    """Gọi ở đầu app.py mỗi render để ghi/xóa cookie refresh token.
+    Tách khỏi handle_google_callback / sign_out để CookieManager được mount trước."""
+    # Xóa cookie sau sign_out (deferred vì switch_page không chờ JS chạy)
+    if st.session_state.pop("_pending_logout", False):
+        try:
+            _cookie_mgr().delete(_COOKIE_KEY)
+        except Exception:
+            pass
+        return
+
+    # Lưu cookie sau đăng nhập thành công
     pending = st.session_state.pop("_pending_rt", None)
     if pending:
         try:
@@ -283,6 +292,9 @@ def firebase_reset_password(email: str):
 # ---------------------------------------------------------------------------
 def try_restore_session() -> bool:
     """Khôi phục session từ cookie. Trả về True nếu thành công."""
+    # Flag được set bởi sign_out() để ngăn restore ngay sau logout
+    if st.session_state.pop("_signed_out", False):
+        return False
     if st.session_state.get("user"):
         return True
     rt = _load_rt()
@@ -441,6 +453,138 @@ def get_music_history(uid: str) -> list:
 
 
 def sign_out():
-    _clear_rt()
     st.session_state.user = None
-    st.rerun()
+    st.session_state.pop("is_admin", None)
+    st.session_state["_signed_out"]    = True  # chặn try_restore_session() 1 render
+    st.session_state["_pending_logout"] = True  # xóa cookie ở render kế (process_pending_rt)
+    st.switch_page("views/home.py")
+
+
+# ---------------------------------------------------------------------------
+# Admin — role checks & user management
+# ---------------------------------------------------------------------------
+def is_admin(uid: str) -> bool:
+    db = init_firebase()
+    try:
+        doc = db.collection("users").document(uid).get()
+        return doc.exists and doc.to_dict().get("role") == "admin"
+    except Exception:
+        return False
+
+
+def get_all_users(limit: int = 200) -> list:
+    db = init_firebase()
+    now = datetime.now(timezone.utc)
+    try:
+        docs = (
+            db.collection("users")
+            .order_by("created_at", direction=fs.Query.DESCENDING)
+            .limit(limit)
+            .stream()
+        )
+        result = []
+        for doc in docs:
+            data = doc.to_dict()
+            expires_at = data.get("expires_at")
+            is_paid = data.get("is_paid", False)
+            if is_paid and expires_at and expires_at < now:
+                is_paid = False
+            result.append({
+                "uid":        doc.id,
+                "email":      data.get("email", ""),
+                "name":       data.get("name", ""),
+                "photo_url":  data.get("photo_url", ""),
+                "plan":       data.get("plan"),
+                "is_paid":    is_paid,
+                "paid_at":    data.get("paid_at"),
+                "expires_at": expires_at,
+                "created_at": data.get("created_at"),
+                "role":       data.get("role", "user"),
+            })
+        return result
+    except Exception:
+        return []
+
+
+def admin_update_user(uid: str, updates: dict):
+    db = init_firebase()
+    db.collection("users").document(uid).update(updates)
+
+
+def admin_set_plan(uid: str, plan: str):
+    activate_plan(uid, plan)
+
+
+def admin_extend_plan(uid: str, extra_days: int):
+    db = init_firebase()
+    now = datetime.now(timezone.utc)
+    doc = db.collection("users").document(uid).get()
+    if doc.exists:
+        current_expires = doc.to_dict().get("expires_at")
+        base = max(current_expires, now) if current_expires and current_expires > now else now
+        db.collection("users").document(uid).update({
+            "is_paid":    True,
+            "expires_at": base + timedelta(days=extra_days),
+        })
+
+
+def admin_remove_plan(uid: str):
+    db = init_firebase()
+    db.collection("users").document(uid).update({
+        "is_paid":    False,
+        "plan":       None,
+        "expires_at": None,
+    })
+
+
+def admin_delete_user_data(uid: str):
+    """Xóa toàn bộ dữ liệu user khỏi Firestore (không xóa Firebase Auth account)."""
+    db = init_firebase()
+    history_ref = db.collection("users").document(uid).collection("music_history")
+    batch = db.batch()
+    for doc in history_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+    db.collection("users").document(uid).delete()
+
+
+def admin_get_user_history(uid: str, limit: int = 100) -> list:
+    db = init_firebase()
+    col = db.collection("users").document(uid).collection("music_history")
+    docs = list(
+        col.order_by("created_at", direction=fs.Query.DESCENDING).limit(limit).stream()
+    )
+    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
+
+def admin_delete_history_item(uid: str, doc_id: str):
+    db = init_firebase()
+    db.collection("users").document(uid).collection("music_history").document(doc_id).delete()
+
+
+def admin_update_history_item(uid: str, doc_id: str, updates: dict):
+    db = init_firebase()
+    db.collection("users").document(uid).collection("music_history").document(doc_id).update(updates)
+
+
+# ---------------------------------------------------------------------------
+# User self-management — projects / history
+# ---------------------------------------------------------------------------
+def get_all_user_history(uid: str, limit: int = 100) -> list:
+    """Lấy toàn bộ lịch sử (không lọc 72h) cho trang Tài khoản."""
+    db = init_firebase()
+    col = db.collection("users").document(uid).collection("music_history")
+    docs = list(
+        col.order_by("created_at", direction=fs.Query.DESCENDING).limit(limit).stream()
+    )
+    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
+
+def delete_history_item(uid: str, doc_id: str):
+    db = init_firebase()
+    db.collection("users").document(uid).collection("music_history").document(doc_id).delete()
+
+
+def update_history_item(uid: str, doc_id: str, updates: dict):
+    db = init_firebase()
+    db.collection("users").document(uid).collection("music_history").document(doc_id).update(updates)
