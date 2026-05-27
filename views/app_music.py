@@ -456,10 +456,18 @@ def image_widget(prompt: str, img_key: str):
         if not fal_key:
             st.warning("Nhập fal.ai API Key ở sidebar để tạo ảnh.")
         else:
+            effective_prompt = prompt
+            if aspect_ratio == "1:1":
+                effective_prompt = (
+                    prompt.rstrip(". ") +
+                    ", no text, no typography, no letters, no words, no title, "
+                    "no caption, no banner, no watermark, no labels, no overlay text, "
+                    "pure visual image only"
+                )
             with st.spinner(f"Nano Banana Pro đang tạo {num_images} ảnh {aspect_ratio} {resolution}..."):
                 try:
                     st.session_state.images[img_key] = generate_image(
-                        prompt, fal_key,
+                        effective_prompt, fal_key,
                         aspect_ratio=aspect_ratio,
                         resolution=resolution,
                         num_images=int(num_images),
