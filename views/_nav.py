@@ -139,37 +139,49 @@ def render():
     })();
     </script>
 
-    <!-- Nút Telegram hỗ trợ floating -->
+    <!-- Nút Telegram hỗ trợ floating + QR popup -->
     <script>
     (function() {
         if (document.getElementById('tg-support-btn')) return;
+
+        // QR popup card
+        var card = document.createElement('div');
+        card.id = 'tg-qr-card';
+        card.innerHTML = '<div style="font-size:0.8rem;font-weight:600;color:#229ED9;margin-bottom:6px;">💬 Nhóm hỗ trợ Telegram</div>'
+                       + '<img src="/qr-telegram.jpg" width="150" height="150" style="border-radius:8px;display:block;"/>'
+                       + '<div style="font-size:0.72rem;color:#aaa;margin-top:5px;text-align:center;">Quét QR hoặc nhấn nút để tham gia</div>';
+        card.style.cssText = 'position:fixed;bottom:6.5rem;right:5rem;background:#1e1e2e;border:1px solid rgba(34,158,217,0.4);border-radius:12px;padding:12px;z-index:99998;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;box-shadow:0 8px 24px rgba(0,0,0,0.5);';
+        document.body.appendChild(card);
+
+        // Nút Telegram
         var btn = document.createElement('a');
         btn.id = 'tg-support-btn';
         btn.href = 'https://t.me/+Jm4a8vReOgA3N2E1';
-        btn.title = 'Chat hỗ trợ qua Telegram';
+        btn.target = '_blank';
+        btn.title = 'Nhóm hỗ trợ Telegram';
         btn.innerHTML = '<svg viewBox="0 0 24 24" fill="white" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.26 13.56l-2.956-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.884.999z"/></svg>';
         btn.style.cssText = [
-            'position:fixed', 'bottom:5.5rem', 'right:2rem',
-            'width:44px', 'height:44px',
+            'position:fixed','bottom:5.5rem','right:2rem',
+            'width:44px','height:44px',
             'background:linear-gradient(135deg,#229ED9,#1a7fc4)',
-            'border:none', 'border-radius:50%',
-            'display:flex', 'align-items:center', 'justify-content:center',
+            'border:none','border-radius:50%',
+            'display:flex','align-items:center','justify-content:center',
             'z-index:99999',
             'box-shadow:0 4px 14px rgba(34,158,217,0.5)',
-            'cursor:pointer', 'text-decoration:none',
+            'cursor:pointer','text-decoration:none',
             'transition:transform .2s,box-shadow .2s',
         ].join(';');
-        btn.onmouseenter = function(){ this.style.transform='scale(1.12)'; this.style.boxShadow='0 6px 20px rgba(34,158,217,0.7)'; };
-        btn.onmouseleave = function(){ this.style.transform='scale(1)'; this.style.boxShadow='0 4px 14px rgba(34,158,217,0.5)'; };
+        btn.onmouseenter = function(){
+            this.style.transform='scale(1.12)';
+            this.style.boxShadow='0 6px 20px rgba(34,158,217,0.7)';
+            card.style.opacity='1'; card.style.transform='translateY(0)';
+        };
+        btn.onmouseleave = function(){
+            this.style.transform='scale(1)';
+            this.style.boxShadow='0 4px 14px rgba(34,158,217,0.5)';
+            card.style.opacity='0'; card.style.transform='translateY(6px)';
+        };
         document.body.appendChild(btn);
-
-        // Tooltip
-        var tip = document.createElement('div');
-        tip.innerText = 'Hỗ trợ';
-        tip.style.cssText = 'position:fixed;bottom:10rem;right:1rem;background:rgba(0,0,0,0.75);color:#fff;padding:3px 8px;border-radius:6px;font-size:0.75rem;pointer-events:none;opacity:0;transition:opacity .2s;z-index:99998;white-space:nowrap;';
-        document.body.appendChild(tip);
-        btn.onmouseenter = function(){ this.style.transform='scale(1.12)'; tip.style.opacity='1'; };
-        btn.onmouseleave = function(){ this.style.transform='scale(1)'; tip.style.opacity='0'; };
     })();
     </script>
     """, unsafe_allow_html=True)
