@@ -2,6 +2,45 @@ import streamlit as st
 
 
 def render():
+    # SEO meta tags — inject vào <head> qua JS
+    st.markdown("""
+    <script>
+    (function() {
+        var metas = {
+            'description': 'Sonicflowai — Nền tảng tạo nhạc AI tự động cho YouTube. Viết lời, tạo beat, kịch bản MV và SEO chỉ trong vài phút. Hỗ trợ 10 thể loại nhạc.',
+            'keywords': 'tạo nhạc AI, AI music producer, nhạc YouTube tự động, Suno AI, Claude AI music, sonicflowai, nhạc tự động, tạo bài hát AI',
+            'author': 'Sonicflowai',
+            'robots': 'index, follow',
+        };
+        Object.entries(metas).forEach(([name, content]) => {
+            if (!document.querySelector('meta[name="' + name + '"]')) {
+                var m = document.createElement('meta');
+                m.name = name; m.content = content;
+                document.head.appendChild(m);
+            }
+        });
+        var og = {
+            'og:title': 'Sonicflowai — AI Music Producer tự động',
+            'og:description': 'Tạo nhạc AI chuyên nghiệp cho YouTube. Lời nhạc, beat, MV script và SEO — tự động hoàn toàn.',
+            'og:url': 'https://sonicflowai.click',
+            'og:type': 'website',
+            'og:image': 'https://sonicflowai.click/_static/og-image.jpg',
+            'twitter:card': 'summary_large_image',
+            'twitter:title': 'Sonicflowai — AI Music Producer',
+            'twitter:description': 'Tạo nhạc AI tự động cho YouTube. Hỗ trợ 10 thể loại, xuất bản nhanh.',
+        };
+        Object.entries(og).forEach(([prop, content]) => {
+            if (!document.querySelector('meta[property="' + prop + '"], meta[name="' + prop + '"]')) {
+                var m = document.createElement('meta');
+                m.setAttribute(prop.startsWith('og:') ? 'property' : 'name', prop);
+                m.content = content;
+                document.head.appendChild(m);
+            }
+        });
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
     st.markdown("""
     <style>
     [data-testid="stPageLink"] a {
