@@ -166,7 +166,7 @@ faqs = [
     ("Tại sao tạo ảnh thumbnail bị lỗi?",
      "Kiểm tra fal.ai API Key ở sidebar. Nếu hết credit, nạp thêm tại fal.ai/dashboard. Mỗi ảnh tốn khoảng $0.02–0.05 credit."),
     ("Liên hệ hỗ trợ ở đâu?",
-     "Nhấn nút 💬 Hỗ trợ (màu xanh Telegram, góc phải màn hình) hoặc link 💬 Hỗ trợ ở footer để chat trực tiếp qua Telegram."),
+     "Nhấn nút 💬 Hỗ trợ (màu xanh Telegram, góc phải màn hình) hoặc link 💬 Hỗ trợ ở footer để vào nhóm hỗ trợ Telegram."),
 ]
 
 for q, a in faqs:
@@ -179,4 +179,4 @@ ft[0].markdown("🎵 **Sonicflowai** © 2026")
 ft[1].page_link("views/home.py",   label="Trang chủ")
 ft[2].page_link("views/about.py",  label="Giới thiệu")
 ft[3].page_link("views/policy.py", label="Chính sách")
-ft[4].markdown('<a href="tg://user?id=5117664843" target="_blank" style="color:#229ED9;text-decoration:none;">💬 Hỗ trợ</a>', unsafe_allow_html=True)
+ft[4].markdown('<a href="https://t.me/+Jm4a8vReOgA3N2E1" target="_blank" style="color:#229ED9;text-decoration:none;">💬 Hỗ trợ</a>', unsafe_allow_html=True)
