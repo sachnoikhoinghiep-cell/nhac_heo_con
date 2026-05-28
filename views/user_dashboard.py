@@ -193,14 +193,11 @@ with tab_plan:
         st.divider()
 
         if is_paid and plan:
-            from firebase_config import init_firebase
-            from firebase_admin import firestore as _fs
-            _db = init_firebase()
-            _doc = _db.collection("users").document(uid).get()
-            _data = _doc.to_dict() if _doc.exists else {}
+            from supabase_db import get_active_subscription
+            _sub = get_active_subscription(uid) or {}
 
-            paid_at    = _data.get("paid_at")
-            expires_at = _data.get("expires_at")
+            paid_at    = _from_iso(_sub.get("paid_at") or _sub.get("started_at"))
+            expires_at = _from_iso(_sub.get("expires_at"))
             days       = _days_left(expires_at)
 
             col_m1, col_m2, col_m3 = st.columns(3)

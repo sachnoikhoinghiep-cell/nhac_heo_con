@@ -8,9 +8,14 @@
  *   supabase functions deploy sepay-webhook --no-verify-jwt
  *
  * Env vars cần set trong Supabase Dashboard → Settings → Edge Functions:
- *   SEPAY_WEBHOOK_SECRET  — token bí mật, cấu hình trong SePay dashboard
+ *   SEPAY_WEBHOOK_SECRET  — secret key HMAC-SHA256, cấu hình trong SePay dashboard
  *   SUPABASE_URL          — tự inject bởi Supabase
  *   SUPABASE_SERVICE_ROLE_KEY — tự inject bởi Supabase
+ *
+ * Xác thực: HMAC-SHA256
+ *   Header X-SePay-Signature: "sha256={hex}"
+ *   Header X-SePay-Timestamp: unix timestamp (seconds)
+ *   Chữ ký = HMAC-SHA256(secret, "{timestamp}.{rawBody}")
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -67,14 +72,42 @@ Deno.serve(async (req: Request) => {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  // ── Xác thực webhook secret ─────────────────────────────────────────────
-  // SePay gửi API Key dạng: Authorization: <key>  (không có "Bearer")
-  // Hỗ trợ cả hai format để tương thích
+  // ── Đọc raw body trước (HMAC cần raw bytes, không parse trước) ──────────
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return new Response("Cannot read body", { status: 400 });
+  }
+
+  // ── Xác thực HMAC-SHA256 ────────────────────────────────────────────────
   const secret = Deno.env.get("SEPAY_WEBHOOK_SECRET") ?? "";
   if (secret) {
-    const auth = req.headers.get("Authorization") ?? "";
-    if (auth !== secret && auth !== `Bearer ${secret}`) {
-      console.warn("Unauthorized webhook attempt, auth:", auth.slice(0, 20));
+    const sigHeader = req.headers.get("X-SePay-Signature") ?? "";
+    const tsHeader  = req.headers.get("X-SePay-Timestamp") ?? "";
+
+    // Kiểm tra timestamp ±5 phút để chống replay attack
+    const ts = parseInt(tsHeader, 10);
+    if (!ts || Math.abs(Date.now() / 1000 - ts) > 300) {
+      console.warn("Webhook timestamp invalid or expired:", tsHeader);
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    // Tính HMAC-SHA256(secret, "{timestamp}.{rawBody}")
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw", enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false, ["sign"]
+    );
+    const buf = await crypto.subtle.sign("HMAC", key, enc.encode(`${tsHeader}.${rawBody}`));
+    const hex = Array.from(new Uint8Array(buf))
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("");
+    const expected = `sha256=${hex}`;
+
+    if (expected !== sigHeader) {
+      console.warn("Invalid HMAC signature. got:", sigHeader.slice(0, 20));
       return new Response("Unauthorized", { status: 401 });
     }
   }
@@ -82,7 +115,7 @@ Deno.serve(async (req: Request) => {
   // ── Parse payload ────────────────────────────────────────────────────────
   let payload: SepayPayload;
   try {
-    payload = await req.json();
+    payload = JSON.parse(rawBody);
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
