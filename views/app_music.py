@@ -26,6 +26,7 @@ from prompts import (
     build_video_script_prompt,
     build_keyword_prompt,
     build_topic_suggestion_prompt,
+    build_mv_director_prompt,
 )
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,7 @@ for _k, _v in {
     "user": None,
     "paypal_approval_url": None,
     "paypal_selected_plan": None,
+    "mv_storyboards": {},
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -941,6 +943,32 @@ def generate_video_script(title: str, style: str, lyrics: str, track_key: str):
     st.session_state.video_scripts[track_key] = msg.content[0].text.strip()
 
 
+def _gen_mv_storyboard(title: str, lyrics: str, track_key: str, tracks_data: list):
+    """Gọi Claude Sonnet để tạo Storyboard MV từ dữ liệu track Suno thực tế."""
+    api_key = st.session_state.get("anthropic_api_key", "").strip()
+    if not api_key:
+        st.warning("Nhập Anthropic API Key ở sidebar để tạo Storyboard MV.")
+        return
+
+    meta  = st.session_state.get("music_meta", {})
+    topic = meta.get("topic", title)
+    genre = meta.get("music_genre", "")
+
+    # Lấy duration thực từ track dài nhất trong 2 version
+    dur = max((float(t.get("duration") or 0) for t in tracks_data[:2]), default=180.0)
+    scenes = max(4, round(dur / 8))
+
+    prompt = build_mv_director_prompt(topic, genre, dur, lyrics)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    msg    = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=6000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    st.session_state.mv_storyboards[track_key] = msg.content[0].text.strip()
+
+
 def music_widget(title: str, style: str, lyrics: str, track_key: str):
     """Per-track Suno UI: generate button → progress → preview → full player + download."""
     tracks   = st.session_state.suno_tracks.get(track_key)
@@ -1010,6 +1038,56 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
                         st.rerun()
                     except Exception as e:
                         st.error(f"Lỗi tạo script: {e}")
+
+    # ── MV Storyboard (AI Director) ────────────────────────────────────────
+    # Chỉ enable khi đủ 2 version (A + B) với audioUrl thực tế
+    _tracks_data = st.session_state.suno_tracks.get(track_key, [])
+    _has_two     = (
+        len(_tracks_data) >= 2
+        and bool(_tracks_data[0].get("audioUrl"))
+        and bool(_tracks_data[1].get("audioUrl"))
+    )
+    _mv_script = st.session_state.mv_storyboards.get(track_key)
+
+    with st.expander("🎬 Kịch Bản MV (AI Storyboard)", expanded=bool(_mv_script)):
+        if not _has_two:
+            # Hiện trạng thái khoá — chưa đủ 2 track
+            _done = sum(1 for t in _tracks_data if t.get("audioUrl"))
+            st.info(
+                f"🔒 Tính năng mở khóa khi có đủ **2 version nhạc (A & B)**.\n\n"
+                f"Hiện tại: **{_done}/2** version hoàn thành."
+            )
+        elif _mv_script:
+            st.markdown(_mv_script)
+            mv1, mv2 = st.columns(2)
+            if mv1.button("🔄 Tạo lại Storyboard", key=f"regen_mv_{track_key}",
+                          use_container_width=True):
+                with st.spinner("AI Director đang phân cảnh lại…"):
+                    try:
+                        _gen_mv_storyboard(title, lyrics, track_key, _tracks_data)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi: {e}")
+            if mv2.button("🗑️ Xóa Storyboard", key=f"del_mv_{track_key}",
+                          use_container_width=True):
+                st.session_state.mv_storyboards.pop(track_key, None)
+                st.rerun()
+        else:
+            # Hiện thông tin trước khi tạo
+            _dur   = max((float(t.get("duration") or 0) for t in _tracks_data[:2]), default=0.0)
+            _scenes = max(4, round(_dur / 8))
+            st.markdown(
+                f"🎵 **{fmt_duration(_dur)}** ({int(_dur)}s) &nbsp;→&nbsp; "
+                f"**{_scenes} cảnh** (1 cảnh ≈ 8s)"
+            )
+            if st.button("🎬 Tạo Kịch Bản MV", key=f"gen_mv_{track_key}",
+                         use_container_width=True, type="primary"):
+                with st.spinner(f"AI Director đang phân cảnh {_scenes} cảnh… (30-60s)"):
+                    try:
+                        _gen_mv_storyboard(title, lyrics, track_key, _tracks_data)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi tạo storyboard: {e}")
 
 # ---------------------------------------------------------------------------
 # JSON helpers

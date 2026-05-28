@@ -312,6 +312,73 @@ Return the ALBUM CONTINUATION BATCH format JSON with exactly {batch_end - batch_
 """
 
 
+def build_mv_director_prompt(topic: str, genre: str, duration_secs: float,
+                             lyrics: str = "") -> str:
+    """
+    Tạo prompt cho AI MV Director / Storyboard Generator.
+    Số scene được tính tự động từ duration_secs (1 scene ≈ 8s).
+    """
+    scenes = max(4, round(duration_secs / 8))
+    mins   = int(duration_secs // 60)
+    secs   = int(duration_secs % 60)
+    dur_str = f"{mins} phút {secs} giây ({int(duration_secs)}s)"
+    lyrics_block = f"\n\n**LYRICS REFERENCE (dùng để khớp đoạn nhạc với cảnh):**\n{lyrics[:1200]}" if lyrics else ""
+
+    return f"""# ROLE & CAPABILITY
+Bạn là một Đạo diễn Music Video (MV Director) kiêm Chuyên gia AI Video Prompting hàng đầu. Nhiệm vụ của bạn là chuyển đổi một bài hát thành một kịch bản phân cảnh (Storyboard) chi tiết, tối ưu hóa cho các công cụ tạo video AI thế hệ mới (như Veo 3, Runway Gen-3, Kling).
+
+# INPUT DATA
+- Chủ đề/Tên bài hát: {topic}
+- Thể loại âm nhạc: {genre}
+- Thời lượng thực tế: {dur_str}
+- Số scenes yêu cầu: **{scenes} scenes** (1 scene ≈ 8s × {scenes} = {scenes*8}s ≈ {dur_str}){lyrics_block}
+
+# CORE DIRECTIVES (QUY TẮC BẮT BUỘC)
+
+## 1. The Consistency Lock (Khóa Đồng Nhất)
+Thiết lập "Kinh Thánh" cho MV. Mọi cảnh quay ĐỀU PHẢI chứa chuỗi khóa này:
+- **[CHARACTER_LOCK]**: Mô tả nhân vật cực kỳ chi tiết (Giới tính, tuổi, kiểu tóc màu cụ thể, trang phục chi tiết từng món, màu sắc, phụ kiện). TUYỆT ĐỐI không thay đổi trong suốt MV.
+- **[ENVIRONMENT_LOCK]**: Mô tả bối cảnh (Thời gian ngày/đêm, không gian, thời tiết, phong cách ánh sáng, tone màu chủ đạo, thiết bị camera).
+
+## 2. Beat-Sync Structure (Cấu trúc khớp nhịp)
+Tốc độ chuyển cảnh tương ứng với thể loại nhạc:
+- Nhạc chậm (Jazz, Ballad, Chill): Cảnh quay 6-8s, slow pan, slow zoom
+- Nhạc vừa (Pop, R&B): Cảnh quay 4-6s, tracking shots, smooth transitions
+- Nhạc mạnh (EDM, Hardstyle, Drill, Rap): Cảnh quay 2-3s, dutch angle, rapid zoom, screen shake tại Drop
+
+## 3. Scene Count Rule
+Bạn PHẢI tạo đúng **{scenes} scenes** — không hơn, không kém.
+Phân bổ thời gian: Intro (1-2 scenes), Verse (30%), Chorus/Drop (40%), Bridge/Break (15%), Outro (15%).
+
+# OUTPUT FORMAT
+Trả về CHÍNH XÁC định dạng sau (không thêm câu giao tiếp):
+
+### 🎬 KỊCH BẢN MV: {topic}
+
+**A. BỘ KHÓA AI (AI LOCKS)**
+* **[CHARACTER_LOCK]:** (prompt tiếng Anh mô tả nhân vật)
+* **[ENVIRONMENT_LOCK]:** (prompt tiếng Anh mô tả bối cảnh)
+
+**B. PHÂN CẢNH CHI TIẾT (STORYBOARD)**
+*Quy tắc prompt: [CHARACTER_LOCK] + [ENVIRONMENT_LOCK] + [Hành động] + [Góc máy]*
+
+| Cảnh | Thời gian | Đoạn Nhạc | Cỡ Cảnh | Prompt AI (English) | Camera Motion |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 0:00-0:08 | Intro | Extreme Wide Shot | [ENVIRONMENT_LOCK]. Cinematic fade-in from black... | Slow drone push-in |
+| 2 | 0:08-0:16 | Intro | Medium Shot | [CHARACTER_LOCK] in [ENVIRONMENT_LOCK]... | Tracking forward |
+(tiếp tục đến scene {scenes})
+
+**C. TỐI ƯU HÓA KÊNH (SEO & METADATA)**
+* **Title:** (Tiêu đề YouTube giật tít, có từ khóa SEO)
+* **Description:** (Mô tả ngắn gọn, hấp dẫn, 2-3 câu)
+* **Hashtags:** (6-8 hashtags chuẩn xác cho thể loại và chủ đề)
+* **Thumbnail Idea:** (Mô tả chi tiết bằng tiếng Anh: cảnh nào ấn tượng nhất, text overlay là gì, tone màu, composition)
+* **BGM Suggestion:** (Nếu là video kể chuyện — chỉ định thể loại nhạc nền phù hợp)
+
+QUAN TRỌNG: Bảng phân cảnh phải có đúng {scenes} hàng, thời gian cộng dồn phải khớp với tổng {dur_str}.
+"""
+
+
 def build_topic_suggestion_prompt(keywords: list, genre: str, language: str) -> str:
     kw_str = ", ".join(f'"{k}"' for k in keywords)
     return f"""You are a YouTube content strategist specializing in {genre} music.
