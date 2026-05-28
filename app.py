@@ -31,6 +31,9 @@ _pages = [
     st.Page("views/about.py",          title="Giới thiệu",  icon="ℹ️"),
     st.Page("views/guide.py",          title="Hướng dẫn",   icon="📋"),
     st.Page("views/policy.py",         title="Chính sách",  icon="📜"),
+    st.Page("views/privacy.py",        title="Privacy Policy",  icon="🔒"),
+    st.Page("views/terms.py",          title="Terms of Use",    icon="📋"),
+    st.Page("views/refund.py",         title="Refund Policy",   icon="↩️"),
 ]
 if st.session_state.get("is_admin"):
     _pages.append(st.Page("views/admin.py", title="Quản trị", icon="⚙️"))
