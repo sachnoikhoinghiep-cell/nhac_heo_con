@@ -943,6 +943,57 @@ def generate_video_script(title: str, style: str, lyrics: str, track_key: str):
     st.session_state.video_scripts[track_key] = msg.content[0].text.strip()
 
 
+def _parse_storyboard_prompts(storyboard_md: str) -> str:
+    """
+    Trích xuất cột 'Prompt AI (English)' + 'Camera Motion' từ bảng Markdown.
+    Trả về chuỗi: mỗi scene là 1 đoạn, cách nhau 1 dòng trắng.
+    """
+    _SKIP = {"prompt", "english", "bắt buộc", "---", ":---", "cảnh", "scene"}
+    prompts = []
+    header_done = False
+
+    for raw in storyboard_md.splitlines():
+        line = raw.strip()
+        if not line.startswith("|"):
+            continue
+
+        cells = [c.strip() for c in line.split("|")]
+        cells = [c for c in cells if c]   # bỏ ô rỗng đầu/cuối
+
+        if len(cells) < 5:
+            continue
+
+        # Dòng header hoặc separator
+        low0 = cells[0].lower()
+        if any(s in low0 for s in _SKIP) or set(cells[0].replace(":", "").replace("-", "").strip()) == set():
+            header_done = True
+            continue
+
+        if not header_done:
+            continue
+
+        # Bỏ dòng separator :---
+        if all(set(c.replace(":", "").replace("-", "").replace(" ", "")) <= {"", "-"} for c in cells):
+            continue
+
+        prompt = cells[4] if len(cells) > 4 else ""
+        camera = cells[5] if len(cells) > 5 else ""
+
+        # Bỏ ô placeholder
+        if not prompt or prompt in {"...", "—", "-", "..."}:
+            continue
+        if any(s in prompt.lower() for s in _SKIP):
+            continue
+
+        # Ghép prompt + camera motion
+        combined = prompt.rstrip(". ")
+        if camera and camera not in {"...", "—", "-", "..."}:
+            combined += f". {camera}"
+        prompts.append(combined)
+
+    return "\n\n".join(prompts)
+
+
 def _gen_mv_storyboard(title: str, lyrics: str, track_key: str, tracks_data: list):
     """Gọi Claude Sonnet để tạo Storyboard MV từ dữ liệu track Suno thực tế."""
     api_key = st.session_state.get("anthropic_api_key", "").strip()
@@ -1059,6 +1110,17 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
             )
         elif _mv_script:
             st.markdown(_mv_script)
+
+            # ── Copy All Prompts ──────────────────────────────────────────
+            _all_prompts = _parse_storyboard_prompts(_mv_script)
+            if _all_prompts:
+                st.divider()
+                st.caption(
+                    "📋 **Tất cả AI Prompts** — mỗi scene 1 đoạn, "
+                    "dán thẳng vào Veo 3 / Runway / Kling / Hailuo"
+                )
+                st.code(_all_prompts, language="text")
+
             mv1, mv2 = st.columns(2)
             if mv1.button("🔄 Tạo lại Storyboard", key=f"regen_mv_{track_key}",
                           use_container_width=True):
