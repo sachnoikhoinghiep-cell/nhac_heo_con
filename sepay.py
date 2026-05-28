@@ -175,7 +175,7 @@ def check_payment_status(payment_code: str) -> str:
         .maybe_single()
         .execute()
     )
-    if not res.data:
+    if res is None or not res.data:
         return "not_found"
 
     status = res.data["status"]
