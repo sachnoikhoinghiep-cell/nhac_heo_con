@@ -68,11 +68,13 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Xác thực webhook secret ─────────────────────────────────────────────
+  // SePay gửi API Key dạng: Authorization: <key>  (không có "Bearer")
+  // Hỗ trợ cả hai format để tương thích
   const secret = Deno.env.get("SEPAY_WEBHOOK_SECRET") ?? "";
   if (secret) {
     const auth = req.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${secret}`) {
-      console.warn("Unauthorized webhook attempt");
+    if (auth !== secret && auth !== `Bearer ${secret}`) {
+      console.warn("Unauthorized webhook attempt, auth:", auth.slice(0, 20));
       return new Response("Unauthorized", { status: 401 });
     }
   }
