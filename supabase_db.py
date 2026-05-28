@@ -338,7 +338,8 @@ def get_projects(uid: str, limit: int = 100,
     db    = get_supabase()
     query = (
         db.table("projects")
-        .select("*, project_tracks(id, track_number, title, status, suno_task_id),"
+        .select("*, project_tracks(id, track_number, title, status, suno_task_id,"
+                "track_audio(id, version, audio_url, stream_url, image_url, duration_secs, suno_id)),"
                 "project_images(id, image_url, aspect_ratio)")
         .eq("user_id", uid)
         .order("created_at", desc=True)

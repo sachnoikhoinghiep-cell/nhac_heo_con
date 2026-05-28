@@ -3,8 +3,9 @@ import requests
 import urllib.parse
 import os
 import json
-from firebase_admin import auth, firestore as fs
-from firebase_config import init_firebase
+from firebase_admin import auth as fb_auth
+from firebase_config import init_firebase   # cần để init Firebase SDK (dùng cho verify_id_token)
+import supabase_db as sdb
 from datetime import datetime, timezone, timedelta
 import extra_streamlit_components as stx
 
@@ -91,22 +92,18 @@ def load_api_keys() -> dict:
     return {}
 
 def save_user_api_keys(uid: str, anthropic: str, google: str, suno: str, fal: str = ""):
-    """Lưu API keys vào Firestore gắn với tài khoản user."""
-    db = init_firebase()
-    db.collection("users").document(uid).update({
-        "api_keys": {"anthropic": anthropic, "google": google, "suno": suno, "fal": fal},
-    })
-
-def load_user_api_keys(uid: str) -> dict:
-    """Đọc API keys từ Firestore của user. Trả về dict rỗng nếu chưa lưu."""
+    """Lưu API keys vào Supabase (mã hoá Fernet)."""
     try:
-        db  = init_firebase()
-        doc = db.collection("users").document(uid).get()
-        if doc.exists:
-            return doc.to_dict().get("api_keys") or {}
+        sdb.save_api_keys(uid, anthropic=anthropic, google=google, suno=suno, fal=fal)
     except Exception:
         pass
-    return {}
+
+def load_user_api_keys(uid: str) -> dict:
+    """Đọc API keys từ Supabase và giải mã. Trả về dict rỗng nếu chưa lưu."""
+    try:
+        return sdb.get_api_keys(uid)
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -337,119 +334,114 @@ def show_auth_ui():
 
 
 # ---------------------------------------------------------------------------
-# Token verification & Firestore
+# Token verification → Supabase profile sync
 # ---------------------------------------------------------------------------
 def verify_and_load_user(token: str, email: str = "", name: str = "", photo: str = "") -> dict | None:
-    db = init_firebase()
+    init_firebase()   # khởi tạo Firebase SDK để verify_id_token hoạt động
     try:
-        decoded = auth.verify_id_token(token)
+        decoded = fb_auth.verify_id_token(token)
     except Exception:
         return None
 
     uid   = decoded["uid"]
-    email = decoded.get("email", "") or email
-    name  = decoded.get("name",  "") or name
+    email = decoded.get("email",   "") or email
+    name  = decoded.get("name",    "") or name
     photo = decoded.get("picture", "") or photo
-    now   = datetime.now(timezone.utc)
 
-    user_ref = db.collection("users").document(uid)
-    doc      = user_ref.get()
+    try:
+        sdb.upsert_profile(uid, email, name, photo)
+        user = sdb.load_user_with_subscription(uid)
+        if user:
+            return user
+    except Exception:
+        pass
 
-    if not doc.exists:
-        user_ref.set({
-            "email": email, "name": name, "photo_url": photo,
-            "created_at": now, "plan": None, "is_paid": False, "expires_at": None,
-        })
-        return {"uid": uid, "email": email, "name": name, "photo": photo,
-                "is_paid": False, "plan": None}
-
-    data       = doc.to_dict()
-    expires_at = data.get("expires_at")
-    is_paid    = data.get("is_paid", False)
-
-    if is_paid and expires_at and expires_at < now:
-        user_ref.update({"is_paid": False})
-        is_paid = False
-
-    if name and not data.get("name"):
-        user_ref.update({"name": name})
-
-    return {
-        "uid":     uid,
-        "email":   email or data.get("email", ""),
-        "name":    name  or data.get("name", email.split("@")[0] if email else "User"),
-        "photo":   photo or data.get("photo_url", ""),
-        "is_paid": is_paid,
-        "plan":    data.get("plan"),
-    }
+    # Fallback nếu Supabase lỗi
+    return {"uid": uid, "email": email, "name": name or email.split("@")[0],
+            "photo": photo, "is_paid": False, "plan": None, "role": "user"}
 
 
 # ---------------------------------------------------------------------------
 # Activate plan / History / Sign-out
 # ---------------------------------------------------------------------------
 def activate_plan(uid: str, plan: str):
-    db      = init_firebase()
-    now     = datetime.now(timezone.utc)
-    expires = now + PLAN_DURATION[plan]
-    db.collection("users").document(uid).update({
-        "is_paid": True, "plan": plan, "paid_at": now, "expires_at": expires,
-    })
+    sdb.activate_subscription(uid, plan, payment_provider="paypal")
 
 
 def save_music_history(uid: str, topic: str, genre: str, num_tracks: int,
                        result: dict, create_mv: bool = False) -> str:
-    """Save a generation project to Firestore. Returns doc_id for later Suno updates."""
-    db           = init_firebase()
-    now          = datetime.now(timezone.utc)
-    project_name = result.get("title") or topic   # Claude-generated title as project name
-    _, doc_ref   = db.collection("users").document(uid).collection("music_history").add({
-        "project_name": project_name,
-        "topic":        topic,
-        "genre":        genre,
-        "num_tracks":   num_tracks,
-        "create_mv":    create_mv,
-        "created_at":   now,
-        "expire_at":    now + timedelta(hours=72),
-        "result":       result,
-        "suno_results": {},
-    })
-    return doc_ref.id
+    """Tạo project mới trong Supabase. Trả về project_id."""
+    name = result.get("title") or topic
+    return sdb.create_project(
+        uid, name, topic, genre, num_tracks, result,
+        create_mv=create_mv, auto_expire_hours=72,
+    )
 
 
-def update_history_suno(uid: str, doc_id: str, suno_results: dict):
-    """Patch a history doc with Suno audio URLs after generation completes."""
-    if not doc_id:
+def update_history_suno(uid: str, project_id: str, suno_results: dict):
+    """Lưu Suno audio URLs vào project (track_audio table)."""
+    if not project_id:
         return
-    db = init_firebase()
-    db.collection("users").document(uid).collection("music_history").document(doc_id).update({
+    try:
+        sdb.save_suno_results(project_id, suno_results)
+    except Exception:
+        pass
+
+
+def _parse_dt(s) -> datetime | None:
+    if not s:
+        return None
+    if isinstance(s, datetime):
+        return s
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _project_to_history(proj: dict) -> dict:
+    """Chuyển Supabase project dict → format tương thích legacy Firebase history."""
+    suno_results: dict = {}
+    for track in (proj.get("project_tracks") or []):
+        track_num = track.get("track_number", 1)
+        key       = f"track_{track_num}"
+        audios    = sorted(
+            track.get("track_audio") or [],
+            key=lambda x: x.get("version", "A"),
+        )
+        if audios:
+            suno_results[key] = [
+                {
+                    "audioUrl":      a.get("audio_url", ""),
+                    "streamAudioUrl": a.get("stream_url", ""),
+                    "imageUrl":      a.get("image_url", ""),
+                    "duration":      float(a.get("duration_secs") or 0),
+                    "id":            a.get("suno_id", ""),
+                }
+                for a in audios
+            ]
+
+    return {
+        "id":           proj["id"],
+        "project_name": proj.get("name", ""),
+        "topic":        proj.get("topic", ""),
+        "genre":        proj.get("genre", ""),
+        "num_tracks":   proj.get("num_tracks", 1),
+        "create_mv":    proj.get("create_mv", False),
+        "created_at":   _parse_dt(proj.get("created_at")),
+        "expire_at":    _parse_dt(proj.get("expires_at")),
+        "result":       proj.get("claude_result") or {},
         "suno_results": suno_results,
-    })
+    }
 
 
 def get_music_history(uid: str) -> list:
-    db      = init_firebase()
-    now     = datetime.now(timezone.utc)
-    cutoff  = now - timedelta(hours=72)
-    col     = db.collection("users").document(uid).collection("music_history")
-
-    # Lấy 20 bài gần nhất, lọc & xóa bài đã hết hạn
-    docs    = list(col.order_by("created_at", direction=fs.Query.DESCENDING).limit(20).stream())
-    valid, to_delete = [], []
-    for doc in docs:
-        d       = doc.to_dict()
-        created = d.get("created_at")
-        if created and created < cutoff:
-            to_delete.append(doc.reference)
-        else:
-            valid.append({"id": doc.id, **d})
-
-    if to_delete:
-        batch = db.batch()
-        for ref in to_delete:
-            batch.delete(ref)
-        batch.commit()
-
-    return valid
+    """Lấy 20 project gần nhất (chưa hết hạn)."""
+    try:
+        projects = sdb.get_projects(uid, limit=20, include_expired=False)
+        return [_project_to_history(p) for p in projects]
+    except Exception:
+        return []
 
 
 def sign_out():
@@ -461,130 +453,92 @@ def sign_out():
 
 
 # ---------------------------------------------------------------------------
-# Admin — role checks & user management
+# Admin — role checks & user management  (Supabase)
 # ---------------------------------------------------------------------------
 def is_admin(uid: str) -> bool:
-    db = init_firebase()
     try:
-        doc = db.collection("users").document(uid).get()
-        return doc.exists and doc.to_dict().get("role") == "admin"
+        profile = sdb.get_profile(uid)
+        return bool(profile and profile.get("role") == "admin")
     except Exception:
         return False
 
 
 def get_all_users(limit: int = 200) -> list:
-    db = init_firebase()
-    now = datetime.now(timezone.utc)
     try:
-        docs = (
-            db.collection("users")
-            .order_by("created_at", direction=fs.Query.DESCENDING)
-            .limit(limit)
-            .stream()
-        )
-        result = []
-        for doc in docs:
-            data = doc.to_dict()
-            expires_at = data.get("expires_at")
-            is_paid = data.get("is_paid", False)
-            if is_paid and expires_at and expires_at < now:
-                is_paid = False
-            result.append({
-                "uid":        doc.id,
-                "email":      data.get("email", ""),
-                "name":       data.get("name", ""),
-                "photo_url":  data.get("photo_url", ""),
-                "plan":       data.get("plan"),
-                "is_paid":    is_paid,
-                "paid_at":    data.get("paid_at"),
-                "expires_at": expires_at,
-                "created_at": data.get("created_at"),
-                "role":       data.get("role", "user"),
-            })
-        return result
+        return sdb.admin_get_all_users(limit)
     except Exception:
         return []
 
 
 def admin_update_user(uid: str, updates: dict):
-    db = init_firebase()
-    db.collection("users").document(uid).update(updates)
+    # Map legacy field names → Supabase field names
+    mapped = {}
+    if "name" in updates:
+        mapped["full_name"] = updates["name"]
+    if "role" in updates:
+        mapped["role"] = updates["role"]
+    if "email" in updates:
+        mapped["email"] = updates["email"]
+    if mapped:
+        sdb.admin_update_user(uid, mapped)
 
 
 def admin_set_plan(uid: str, plan: str):
-    activate_plan(uid, plan)
+    sdb.admin_set_plan(uid, plan)
 
 
 def admin_extend_plan(uid: str, extra_days: int):
-    db = init_firebase()
-    now = datetime.now(timezone.utc)
-    doc = db.collection("users").document(uid).get()
-    if doc.exists:
-        current_expires = doc.to_dict().get("expires_at")
-        base = max(current_expires, now) if current_expires and current_expires > now else now
-        db.collection("users").document(uid).update({
-            "is_paid":    True,
-            "expires_at": base + timedelta(days=extra_days),
-        })
+    sdb.admin_extend_plan(uid, extra_days)
 
 
 def admin_remove_plan(uid: str):
-    db = init_firebase()
-    db.collection("users").document(uid).update({
-        "is_paid":    False,
-        "plan":       None,
-        "expires_at": None,
-    })
+    sdb.admin_remove_plan(uid)
 
 
 def admin_delete_user_data(uid: str):
-    """Xóa toàn bộ dữ liệu user khỏi Firestore (không xóa Firebase Auth account)."""
-    db = init_firebase()
-    history_ref = db.collection("users").document(uid).collection("music_history")
-    batch = db.batch()
-    for doc in history_ref.stream():
-        batch.delete(doc.reference)
-    batch.commit()
-    db.collection("users").document(uid).delete()
+    sdb.admin_delete_user_data(uid)
 
 
 def admin_get_user_history(uid: str, limit: int = 100) -> list:
-    db = init_firebase()
-    col = db.collection("users").document(uid).collection("music_history")
-    docs = list(
-        col.order_by("created_at", direction=fs.Query.DESCENDING).limit(limit).stream()
-    )
-    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+    projects = sdb.admin_get_user_projects(uid, limit)
+    return [_project_to_history(p) for p in projects]
 
 
-def admin_delete_history_item(uid: str, doc_id: str):
-    db = init_firebase()
-    db.collection("users").document(uid).collection("music_history").document(doc_id).delete()
+def admin_delete_history_item(uid: str, project_id: str):
+    sdb.admin_delete_project(project_id)
 
 
-def admin_update_history_item(uid: str, doc_id: str, updates: dict):
-    db = init_firebase()
-    db.collection("users").document(uid).collection("music_history").document(doc_id).update(updates)
+def admin_update_history_item(uid: str, project_id: str, updates: dict):
+    # Map project_name → name
+    mapped = {}
+    if "project_name" in updates:
+        mapped["name"] = updates["project_name"]
+    for k in ("topic", "genre", "status"):
+        if k in updates:
+            mapped[k] = updates[k]
+    if mapped:
+        sdb.admin_update_project(project_id, mapped)
 
 
 # ---------------------------------------------------------------------------
-# User self-management — projects / history
+# User self-management — projects / history  (Supabase)
 # ---------------------------------------------------------------------------
 def get_all_user_history(uid: str, limit: int = 100) -> list:
-    """Lấy toàn bộ lịch sử (không lọc 72h) cho trang Tài khoản."""
-    db = init_firebase()
-    col = db.collection("users").document(uid).collection("music_history")
-    docs = list(
-        col.order_by("created_at", direction=fs.Query.DESCENDING).limit(limit).stream()
-    )
-    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+    """Lấy toàn bộ project (không lọc hết hạn) cho trang Tài khoản."""
+    projects = sdb.get_projects(uid, limit=limit, include_expired=True)
+    return [_project_to_history(p) for p in projects]
 
 
-def delete_history_item(uid: str, doc_id: str):
-    db = init_firebase()
-    db.collection("users").document(uid).collection("music_history").document(doc_id).delete()
+def delete_history_item(uid: str, project_id: str):
+    sdb.delete_project(project_id)
 
 
-def update_history_item(uid: str, doc_id: str, updates: dict):
-    db = init_firebase()
-    db.collection("users").document(uid).collection("music_history").document(doc_id).update(updates)
+def update_history_item(uid: str, project_id: str, updates: dict):
+    mapped = {}
+    if "project_name" in updates:
+        mapped["name"] = updates["project_name"]
+    for k in ("topic", "genre"):
+        if k in updates:
+            mapped[k] = updates[k]
+    if mapped:
+        sdb.update_project(project_id, mapped)
