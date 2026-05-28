@@ -490,9 +490,14 @@ def admin_get_all_users(limit: int = 500) -> list:
         days_left  = max(0, (expires_at - now).days) if expires_at else None
 
         result.append({
-            **p,
-            "is_paid":   sub is not None,
-            "plan":      sub["plan_name"] if sub else None,
+            "uid":        p["id"],
+            "email":      p.get("email", ""),
+            "name":       p.get("full_name", ""),
+            "photo_url":  p.get("avatar_url", ""),
+            "role":       p.get("role", "user"),
+            "created_at": p.get("created_at"),
+            "is_paid":    sub is not None,
+            "plan":       sub["plan_name"] if sub else None,
             "expires_at": expires_at,
             "days_left":  days_left,
         })
