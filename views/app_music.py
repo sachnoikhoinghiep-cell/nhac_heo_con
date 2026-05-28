@@ -50,7 +50,7 @@ if not st.session_state.user:
     <div style="text-align:center; padding: 3rem 1rem 1rem;">
         <div style="font-size:3.5rem;">🎵</div>
         <h2>Đăng nhập để tạo nhạc</h2>
-        <p style="color:rgba(255,255,255,0.55); max-width:480px; margin:0 auto 2rem;">
+        <p style="color:rgba(255,255,255,0.88); max-width:480px; margin:0 auto 2rem;">
             Các trang <b>Trang chủ</b>, <b>Giới thiệu</b>, <b>Hướng dẫn</b>
             và <b>Chính sách</b> xem tự do — không cần đăng nhập.<br><br>
             Để <b>tạo nhạc AI</b>, cần đăng nhập và chọn gói dịch vụ.
@@ -104,7 +104,7 @@ if not _user["is_paid"]:
     <div style="text-align:center; padding: 2rem 1rem 0.5rem;">
         <div style="font-size:3rem;">🎵</div>
         <h2>Chọn gói để bắt đầu tạo nhạc</h2>
-        <p style="color:rgba(255,255,255,0.55); max-width:560px; margin:0 auto 0.5rem;">
+        <p style="color:rgba(255,255,255,0.88); max-width:560px; margin:0 auto 0.5rem;">
             Xin chào <b>{_user['name']}</b>!<br>
             Phí nền tảng duy nhất — API Anthropic/Suno/fal.ai bạn tự điền, xài bao nhiêu tính bấy nhiêu.
         </p>
@@ -126,7 +126,7 @@ if not _user["is_paid"]:
                 <div style="font-size:1.3rem;font-weight:800;margin:0.3rem 0;">
                     {fmt_vnd(_pinfo['price_vnd'])}₫
                 </div>
-                <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);line-height:1.4;">
+                <div style="font-size:0.72rem;color:rgba(255,255,255,0.82);line-height:1.4;">
                     {_pinfo['desc']}
                 </div>
                 <div style="margin-top:0.5rem;background:{_pinfo['color']};color:#fff;

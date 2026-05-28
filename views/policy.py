@@ -25,7 +25,7 @@ with col:
         ">
             <div style="font-size:2.2rem;">🔒</div>
             <div style="font-weight:700;font-size:1rem;margin:0.5rem 0;">Chính Sách Bảo Mật</div>
-            <div style="color:rgba(255,255,255,0.55);font-size:0.82rem;line-height:1.5;">
+            <div style="color:rgba(255,255,255,0.88);font-size:0.82rem;line-height:1.5;">
                 Thông tin thu thập, cách sử dụng, bảo mật dữ liệu và quyền của bạn.
             </div>
         </div>
@@ -45,7 +45,7 @@ with col:
         ">
             <div style="font-size:2.2rem;">📋</div>
             <div style="font-weight:700;font-size:1rem;margin:0.5rem 0;">Điều Khoản Sử Dụng</div>
-            <div style="color:rgba(255,255,255,0.55);font-size:0.82rem;line-height:1.5;">
+            <div style="color:rgba(255,255,255,0.88);font-size:0.82rem;line-height:1.5;">
                 Quy định sử dụng, quyền sở hữu nội dung, giới hạn trách nhiệm.
             </div>
         </div>
@@ -65,7 +65,7 @@ with col:
         ">
             <div style="font-size:2.2rem;">↩️</div>
             <div style="font-weight:700;font-size:1rem;margin:0.5rem 0;">Chính Sách Hoàn Tiền</div>
-            <div style="color:rgba(255,255,255,0.55);font-size:0.82rem;line-height:1.5;">
+            <div style="color:rgba(255,255,255,0.88);font-size:0.82rem;line-height:1.5;">
                 Điều kiện hoàn tiền, quy trình yêu cầu và câu hỏi thường gặp.
             </div>
         </div>

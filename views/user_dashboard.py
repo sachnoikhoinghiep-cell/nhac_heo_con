@@ -182,7 +182,7 @@ with tab_plan:
                 ">
                     <div style="font-size: 2.5rem;">🆓</div>
                     <div style="font-size: 1.4rem; font-weight: 700; color: #9ca3af;">Chưa có gói</div>
-                    <div style="color: rgba(255,255,255,0.4); font-size: 0.85rem; margin-top: 0.3rem;">Free tier</div>
+                    <div style="color: rgba(255,255,255,0.75); font-size: 0.85rem; margin-top: 0.3rem;">Free tier</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -217,7 +217,7 @@ with tab_plan:
                     remaining = 1.0 - pct
                     color_bar = "#10b981" if remaining > 0.3 else ("#f59e0b" if remaining > 0.1 else "#ef4444")
                     st.markdown(
-                        f'<p style="font-size:0.8rem;color:rgba(255,255,255,0.5);margin-bottom:2px;">Thời gian còn lại: {days} ngày</p>',
+                        f'<p style="font-size:0.8rem;color:rgba(255,255,255,0.82);margin-bottom:2px;">Thời gian còn lại: {days} ngày</p>',
                         unsafe_allow_html=True,
                     )
                     st.progress(remaining, text="")

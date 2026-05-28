@@ -2,7 +2,6 @@ import streamlit as st
 
 
 def render():
-    # SEO meta tags — inject vào <head> qua JS
     st.markdown("""
     <script>
     (function() {
@@ -43,19 +42,119 @@ def render():
 
     st.markdown("""
     <style>
+    /* ── Global background ── */
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"] {
+        background-color: #080808 !important;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #0d0d0d !important;
+        border-right: 1px solid rgba(255,255,255,0.07) !important;
+    }
+    [data-testid="stSidebar"] * { color: rgba(255,255,255,0.85) !important; }
+
+    /* ── Typography defaults ── */
+    .stMarkdown p { color: rgba(255,255,255,0.82); line-height: 1.7; }
+    h1, h2, h3, h4, h5, h6 { color: #ffffff !important; }
+    hr { border-color: rgba(255,255,255,0.08) !important; margin: 1.8rem 0 !important; }
+
+    /* ── Streamlit metrics ── */
+    [data-testid="stMetricValue"]  { color: #22c55e !important; font-weight: 800 !important; }
+    [data-testid="stMetricLabel"]  { color: rgba(255,255,255,0.60) !important; font-size: 0.78rem !important; }
+
+    /* ── Buttons (Streamlit native) ── */
+    .stButton > button {
+        background: #22c55e !important;
+        color: #000 !important;
+        border: none !important;
+        font-weight: 700 !important;
+        border-radius: 9px !important;
+        padding: 0.5rem 1.4rem !important;
+        transition: background 0.18s, transform 0.14s !important;
+    }
+    .stButton > button:hover {
+        background: #16a34a !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px rgba(34,197,94,0.35) !important;
+    }
+    .stButton > button:active { transform: translateY(0) !important; }
+
+    /* ── Page links ── */
     [data-testid="stPageLink"] a {
-        color: rgba(250,250,250,0.85) !important;
+        color: rgba(240,240,240,0.80) !important;
         text-decoration: none !important;
         font-weight: 500;
-        padding: 0.35rem 0.75rem;
-        border-radius: 8px;
-        transition: background 0.2s;
+        padding: 0.28rem 0.65rem;
+        border-radius: 7px;
+        font-size: 0.9rem;
+        transition: color 0.18s, background 0.18s;
     }
     [data-testid="stPageLink"] a:hover {
-        color: #fff !important;
-        background: rgba(255,255,255,0.12);
+        color: #22c55e !important;
+        background: rgba(34,197,94,0.10);
     }
+
+    /* ── Caption / small text ── */
+    .stCaption, [data-testid="stCaptionContainer"] p {
+        color: rgba(255,255,255,0.55) !important;
+    }
+
+    /* ── Inputs ── */
+    [data-testid="stTextInput"] label,
+    [data-testid="stTextArea"] label,
+    [data-testid="stSelectbox"] label,
+    [data-testid="stSlider"] label,
+    [data-testid="stCheckbox"] label,
+    [data-testid="stRadio"] label { color: rgba(255,255,255,0.80) !important; }
+
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea {
+        background: #111 !important;
+        color: #fff !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stTextArea"] textarea:focus {
+        border-color: #22c55e !important;
+        box-shadow: 0 0 0 2px rgba(34,197,94,0.20) !important;
+    }
+
+    /* ── Expander ── */
+    [data-testid="stExpander"] {
+        background: #0f0f0f !important;
+        border: 1px solid rgba(255,255,255,0.09) !important;
+        border-radius: 10px !important;
+    }
+    [data-testid="stExpander"] summary { color: rgba(255,255,255,0.90) !important; }
+    [data-testid="stExpander"] p       { color: rgba(255,255,255,0.75) !important; }
+
+    /* ── Progress bar ── */
+    [data-testid="stProgress"] > div > div { background: #22c55e !important; }
+
+    /* ── Tabs ── */
+    button[data-baseweb="tab"]            { color: rgba(255,255,255,0.55) !important; }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #22c55e !important;
+        border-bottom: 2px solid #22c55e !important;
+    }
+
+    /* ── Alerts ── */
+    [data-testid="stAlert"] { border-radius: 10px !important; }
+
+    /* ── Hide default Streamlit header ── */
     header[data-testid="stHeader"] { display: none; }
+
+    /* ── Logo ── */
+    .snf-logo {
+        font-size: 1.22rem;
+        font-weight: 900;
+        color: #22c55e !important;
+        letter-spacing: -0.3px;
+        text-decoration: none;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -68,7 +167,7 @@ def render():
         c0, c1, c2, c3, c4, c5, c6 = st.columns([2.2, 1, 1, 1, 1, 1, 1.6])
         c7 = None
 
-    c0.markdown("#### 🎵 **Sonicflowai**")
+    c0.markdown('<span class="snf-logo">🎵 Sonicflowai</span>', unsafe_allow_html=True)
     c1.page_link("views/home.py",      label="Trang chủ")
     c2.page_link("views/app_music.py", label="Ứng dụng")
     c3.page_link("views/about.py",     label="Giới thiệu")
@@ -88,11 +187,11 @@ def render():
                 if st.button(f"👤 {name}", use_container_width=True, key="nav_user_btn"):
                     st.switch_page("views/user_dashboard.py")
     else:
-        c6.page_link("views/app_music.py", label="🔵 Đăng nhập")
+        c6.page_link("views/app_music.py", label="🟢 Đăng nhập")
 
     st.divider()
 
-    # Nút scroll-to-top — tạo qua JS để tồn tại qua mỗi lần Streamlit re-render
+    # Floating buttons
     st.markdown("""
     <script>
     (function() {
@@ -104,18 +203,18 @@ def render():
         btn.style.cssText = [
             'position:fixed', 'bottom:2rem', 'right:2rem',
             'width:44px', 'height:44px',
-            'background:rgba(99,102,241,0.82)',
-            'color:#fff', 'border:none', 'border-radius:50%',
+            'background:rgba(34,197,94,0.85)',
+            'color:#000', 'border:none', 'border-radius:50%',
             'font-size:1.5rem', 'line-height:1',
             'cursor:pointer', 'display:none',
             'align-items:center', 'justify-content:center',
             'z-index:99999',
-            'box-shadow:0 4px 14px rgba(0,0,0,0.45)',
+            'box-shadow:0 4px 14px rgba(34,197,94,0.40)',
             'transition:opacity .25s,transform .2s,background .2s',
             'opacity:0'
         ].join(';');
-        btn.onmouseenter = function(){ this.style.background='rgba(99,102,241,1)'; this.style.transform='scale(1.12)'; };
-        btn.onmouseleave = function(){ this.style.background='rgba(99,102,241,0.82)'; this.style.transform='scale(1)'; };
+        btn.onmouseenter = function(){ this.style.background='rgba(34,197,94,1)'; this.style.transform='scale(1.12)'; };
+        btn.onmouseleave = function(){ this.style.background='rgba(34,197,94,0.85)'; this.style.transform='scale(1)'; };
         btn.onclick = function(){
             window.scrollTo({top:0,behavior:'smooth'});
             var m = document.querySelector('.main');
@@ -139,21 +238,19 @@ def render():
     })();
     </script>
 
-    <!-- Nút Telegram hỗ trợ floating + QR popup -->
+    <!-- Telegram floating button + QR popup -->
     <script>
     (function() {
         if (document.getElementById('tg-support-btn')) return;
 
-        // QR popup card
         var card = document.createElement('div');
         card.id = 'tg-qr-card';
         card.innerHTML = '<div style="font-size:0.8rem;font-weight:600;color:#229ED9;margin-bottom:6px;">💬 Nhóm hỗ trợ Telegram</div>'
                        + '<img src="/qr-telegram.jpg" width="150" height="150" style="border-radius:8px;display:block;"/>'
                        + '<div style="font-size:0.72rem;color:#aaa;margin-top:5px;text-align:center;">Quét QR hoặc nhấn nút để tham gia</div>';
-        card.style.cssText = 'position:fixed;bottom:6.5rem;right:5rem;background:#1e1e2e;border:1px solid rgba(34,158,217,0.4);border-radius:12px;padding:12px;z-index:99998;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;box-shadow:0 8px 24px rgba(0,0,0,0.5);';
+        card.style.cssText = 'position:fixed;bottom:6.5rem;right:5rem;background:#111;border:1px solid rgba(34,158,217,0.4);border-radius:12px;padding:12px;z-index:99998;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;box-shadow:0 8px 24px rgba(0,0,0,0.6);';
         document.body.appendChild(card);
 
-        // Nút Telegram
         var btn = document.createElement('a');
         btn.id = 'tg-support-btn';
         btn.href = 'https://t.me/+Jm4a8vReOgA3N2E1';
