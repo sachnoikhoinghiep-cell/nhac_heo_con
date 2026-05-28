@@ -17,7 +17,7 @@ import json
 import io
 import os
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from prompts import (
     SYSTEM_PROMPT,
     build_single_prompt,
@@ -32,31 +32,14 @@ from prompts import (
 # ---------------------------------------------------------------------------
 # Auth gate — Google Sign-In + Firebase
 # ---------------------------------------------------------------------------
-PLANS = {
-    "Ngày":  {"price": "0.99",  "desc": "Sử dụng trong 24h",      "plan_id": "P-48U172572M537580PNICAPDY"},
-    "Tuần":  {"price": "4.99",  "desc": "Tiết kiệm 30%",           "plan_id": "P-12862804M08177324NICAPSI"},
-    "Tháng": {"price": "14.99", "desc": "Phổ biến nhất",           "plan_id": "P-5AV04190G6017082ENICAOVA"},
-    "Năm":   {"price": "99.99", "desc": "Gói chuyên nghiệp (VIP)", "plan_id": "P-055284903H354632FNICAN7I"},
-}
-PLAN_ID_TO_NAME = {v["plan_id"]: k for k, v in PLANS.items()}
-
-def _paypal_client_id() -> str:
-    try:    return st.secrets["PAYPAL_CLIENT_ID"]
-    except Exception: return os.environ.get("PAYPAL_CLIENT_ID", "")
-
-def _paypal_secret() -> str:
-    try:    return st.secrets["PAYPAL_SECRET"]
-    except Exception: return os.environ.get("PAYPAL_SECRET", "")
-
-def _app_url() -> str:
-    try:    return st.secrets["REDIRECT_URI"].rstrip("/")
-    except Exception: return os.environ.get("REDIRECT_URI", "http://localhost:8501")
+import sys, importlib
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from sepay import PLANS_VND, create_payment_request, check_payment_status, fmt_vnd
 
 for _k, _v in {
-    "user": None,
-    "paypal_approval_url": None,
-    "paypal_selected_plan": None,
-    "mv_storyboards": {},
+    "user":             None,
+    "mv_storyboards":   {},
+    "sepay_payment":    None,   # dict: payment_code, amount_vnd, qr_url, plan, expires_at
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -99,57 +82,136 @@ if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
     sign_out()
     st.stop()
 
-# Chưa thanh toán → trang chọn gói
+# Chưa thanh toán → trang chọn gói SePay
 if not _user["is_paid"]:
+    _PAY = st.session_state.sepay_payment   # dict hoặc None
+
+    # ── Auto-check: nếu đang chờ thanh toán, kiểm tra mỗi render ────────
+    if _PAY and _PAY.get("payment_code"):
+        _status = check_payment_status(_PAY["payment_code"])
+        if _status == "completed":
+            # Reload user từ Supabase để lấy subscription mới
+            from auth import verify_and_load_user as _vlu
+            from supabase_db import load_user_with_subscription as _lwu
+            _refreshed = _lwu(_user["uid"])
+            if _refreshed.get("is_paid"):
+                st.session_state.user = _refreshed
+                st.session_state.sepay_payment = None
+                st.rerun()
+
+    # ── Header ────────────────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="text-align:center; padding: 2rem 1rem 1rem;">
-        <div style="font-size:3rem;">🎟️</div>
+    <div style="text-align:center; padding: 2rem 1rem 0.5rem;">
+        <div style="font-size:3rem;">🎵</div>
         <h2>Chọn gói để bắt đầu tạo nhạc</h2>
-        <p style="color:rgba(255,255,255,0.55);">
-            Xin chào <b>{_user['name']}</b>! Bạn đã đăng nhập thành công.<br>
-            Chọn gói dịch vụ phù hợp để mở khoá toàn bộ tính năng AI Music Producer.
+        <p style="color:rgba(255,255,255,0.55); max-width:560px; margin:0 auto 0.5rem;">
+            Xin chào <b>{_user['name']}</b>!<br>
+            Phí nền tảng duy nhất — API Anthropic/Suno/fal.ai bạn tự điền, xài bao nhiêu tính bấy nhiêu.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    selected_plan = st.selectbox("Chọn gói dịch vụ:", list(PLANS.keys()), key="selected_plan_key")
-    plan_info     = PLANS[selected_plan]
-    st.markdown(f"**Giá:** ${plan_info['price']} USD — {plan_info['desc']}")
+    # ── Bảng gói ─────────────────────────────────────────────────────────
+    _plan_cols = st.columns(4)
+    _selected_plan = st.session_state.get("_sel_plan", "Tháng")
+    for _ci, (_pname, _pinfo) in enumerate(PLANS_VND.items()):
+        with _plan_cols[_ci]:
+            _active = _selected_plan == _pname
+            _border = f"2px solid {_pinfo['color']}" if _active else "1px solid rgba(255,255,255,0.1)"
+            _bg     = f"{_pinfo['color']}22" if _active else "rgba(255,255,255,0.03)"
+            st.markdown(f"""
+            <div style="background:{_bg};border:{_border};border-radius:14px;padding:1rem 0.8rem;
+                        text-align:center;min-height:140px;">
+                <div style="font-weight:700;font-size:1rem;color:{_pinfo['color']};">{_pname}</div>
+                <div style="font-size:1.3rem;font-weight:800;margin:0.3rem 0;">
+                    {fmt_vnd(_pinfo['price_vnd'])}₫
+                </div>
+                <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);line-height:1.4;">
+                    {_pinfo['desc']}
+                </div>
+                <div style="margin-top:0.5rem;background:{_pinfo['color']};color:#fff;
+                            border-radius:9999px;font-size:0.68rem;padding:2px 8px;
+                            display:inline-block;">{_pinfo['badge']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("Chọn", key=f"sel_{_pname}", use_container_width=True,
+                         type="primary" if _active else "secondary"):
+                st.session_state["_sel_plan"] = _pname
+                st.session_state.sepay_payment = None
+                st.rerun()
+
+    _selected_plan = st.session_state.get("_sel_plan", "Tháng")
+    _pinfo = PLANS_VND[_selected_plan]
     st.divider()
 
-    if st.session_state.paypal_selected_plan != selected_plan:
-        st.session_state.paypal_approval_url  = None
-        st.session_state.paypal_selected_plan = selected_plan
+    # ── Trạng thái QR hiện tại ────────────────────────────────────────────
+    if _PAY and _PAY.get("plan") == _selected_plan:
+        _status = check_payment_status(_PAY["payment_code"])
 
-    if st.session_state.paypal_approval_url:
-        st.info(f"Đã tạo đơn đăng ký — Gói **{selected_plan}** — ${plan_info['price']} USD/kỳ")
-        st.link_button(
-            "💳 Tiếp tục đăng ký trên PayPal",
-            st.session_state.paypal_approval_url,
-            type="primary",
-            use_container_width=True,
-        )
-        if st.button("🔄 Tạo lại đơn mới", use_container_width=True):
-            st.session_state.paypal_approval_url = None
-            st.rerun()
+        if _status == "pending":
+            _col_qr, _col_info = st.columns([1, 1.6])
+            with _col_qr:
+                if _PAY.get("qr_url"):
+                    st.image(_PAY["qr_url"], caption="Quét QR bằng app ngân hàng", width=220)
+                else:
+                    st.info("Không tạo được QR — vui lòng chuyển khoản thủ công.")
+
+            with _col_info:
+                st.markdown(f"### Chuyển khoản — Gói **{_selected_plan}**")
+                st.markdown(f"**Số tiền:** `{fmt_vnd(_PAY['amount_vnd'])} VNĐ`")
+                st.markdown(f"**Ngân hàng:** `{_PAY.get('account_name','')} — {_PAY.get('account_no','')}`")
+                st.markdown(f"**Nội dung CK (bắt buộc):**")
+                st.code(_PAY["payment_code"], language="text")
+                st.caption("⚠️ Nội dung chuyển khoản phải chứa đúng mã trên để hệ thống tự kích hoạt.")
+
+                _exp = _PAY.get("expires_at", "")
+                if _exp:
+                    try:
+                        _exp_dt = datetime.fromisoformat(_exp.replace("Z", "+00:00"))
+                        _mins   = max(0, int((_exp_dt - datetime.now(timezone.utc)).total_seconds() // 60))
+                        st.caption(f"⏱️ Mã hết hạn sau: **{_mins} phút**")
+                    except Exception:
+                        pass
+
+                _cb1, _cb2 = st.columns(2)
+                if _cb1.button("✅ Tôi đã chuyển khoản", type="primary", use_container_width=True):
+                    _s = check_payment_status(_PAY["payment_code"])
+                    if _s == "completed":
+                        st.rerun()
+                    elif _s == "pending":
+                        st.warning("Chưa nhận được thanh toán. Vui lòng chờ 10–30 giây rồi thử lại.")
+                    else:
+                        st.error(f"Trạng thái: {_s}. Vui lòng tạo mã mới.")
+                        st.session_state.sepay_payment = None
+                if _cb2.button("🔄 Tạo mã mới", use_container_width=True):
+                    st.session_state.sepay_payment = None
+                    st.rerun()
+
+        elif _status == "expired":
+            st.warning("Mã thanh toán đã hết hạn (30 phút). Vui lòng tạo mã mới.")
+            st.session_state.sepay_payment = None
+            if st.button("🔄 Tạo mã thanh toán mới", type="primary"):
+                st.rerun()
+        elif _status == "failed":
+            st.error("Giao dịch thất bại (số tiền không khớp). Vui lòng liên hệ hỗ trợ.")
+            st.session_state.sepay_payment = None
+
     else:
-        if st.button("💳 Đăng ký qua PayPal", type="primary", use_container_width=True):
-            with st.spinner("Đang tạo đơn đăng ký PayPal…"):
+        # Chưa có mã → nút tạo QR
+        st.markdown(f"**Gói đã chọn:** {_selected_plan} — `{fmt_vnd(_pinfo['price_vnd'])} VNĐ`")
+        if st.button(f"📱 Tạo QR & Mã Thanh Toán — {_selected_plan}",
+                     type="primary", use_container_width=True):
+            with st.spinner("Đang tạo mã chuyển khoản…"):
                 try:
-                    from paypal import create_subscription as _pp_create_sub
-                    _app_u = _app_url()
-                    _, _approval = _pp_create_sub(
-                        _paypal_client_id(), _paypal_secret(),
-                        plan_info["plan_id"],
-                        _app_u, _app_u,
-                    )
-                    st.session_state.paypal_approval_url  = _approval
-                    st.session_state.paypal_selected_plan = selected_plan
+                    _req = create_payment_request(_user["uid"], _selected_plan)
+                    _req["plan"] = _selected_plan
+                    st.session_state.sepay_payment = _req
                     st.rerun()
                 except Exception as _e:
-                    st.error(f"Lỗi tạo đơn đăng ký PayPal: {_e}")
+                    st.error(f"Lỗi tạo thanh toán: {_e}")
 
-    st.warning("Vui lòng hoàn tất thanh toán để sử dụng tính năng tạo nhạc AI.")
+    st.divider()
+    st.page_link("views/home.py", label="🏠 Về trang chủ")
     st.stop()
 
 st.success(f"✅ Xin chào **{_user['name']}** — Gói **{_user['plan']}** đang hoạt động")
