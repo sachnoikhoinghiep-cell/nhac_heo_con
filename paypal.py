@@ -26,7 +26,7 @@ def create_subscription(client_id: str, secret: str, plan_id: str,
             "application_context": {
                 "return_url":  return_url,
                 "cancel_url":  cancel_url,
-                "brand_name":  "nhacheocon",
+                "brand_name":  "Sonicflowai",
                 "user_action": "SUBSCRIBE_NOW",
             },
         },

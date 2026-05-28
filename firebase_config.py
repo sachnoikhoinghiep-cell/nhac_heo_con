@@ -33,7 +33,7 @@ def init_firebase():
             cred = credentials.Certificate("firebase_service_account.json")
         else:
             st.error(
-                "⚠️ Chưa cấu hình Firebase Service Account cho project **nhacheocon**.\n\n"
+                "⚠️ Chưa cấu hình Firebase Service Account cho project **Sonicflowai**.\n\n"
                 "**Cách 1 — Streamlit Cloud secrets:**\n"
                 "Thêm key `FIREBASE_SERVICE_ACCOUNT` = nội dung file JSON service account.\n\n"
                 "**Cách 2 — Local / VPS:**\n"

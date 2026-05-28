@@ -73,9 +73,9 @@ Chúng tôi sử dụng cookie trình duyệt cho:
 
 | Cookie | Nội dung | Thời hạn |
 |--------|----------|----------|
-| `nhacheocon_rt` | Refresh token (đăng nhập tự động) | 30 ngày |
-| `nhacheocon_ak` | API keys (tự điền) | 365 ngày |
-| `nhacheocon_presets` | Preset tạo nhạc của bạn | 365 ngày |
+| `sonicflowai_rt` | Refresh token (đăng nhập tự động) | 30 ngày |
+| `sonicflowai_ak` | API keys (tự điền) | 365 ngày |
+| `sonicflowai_presets` | Preset tạo nhạc của bạn | 365 ngày |
 
 Bạn có thể xóa toàn bộ cookie bằng cách **Đăng xuất** hoặc xóa cookie trong cài đặt trình duyệt.
 

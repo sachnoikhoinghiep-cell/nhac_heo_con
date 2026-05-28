@@ -179,7 +179,7 @@ with cb2:
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("---")
 ft = st.columns([3, 1, 1, 1, 1])
-ft[0].markdown("🎵 **nhacheocon** © 2026 — AI Music Producer Automation")
+ft[0].markdown("🎵 **Sonicflowai** © 2026 — AI Music Producer Automation")
 ft[1].page_link("views/about.py",  label="Giới thiệu")
 ft[2].page_link("views/guide.py",  label="Hướng dẫn")
 ft[3].page_link("views/policy.py", label="Chính sách")

@@ -3,13 +3,13 @@ from views._nav import render as nav
 
 nav()
 
-st.markdown("# ℹ️ Giới thiệu về nhacheocon")
+st.markdown("# ℹ️ Giới thiệu về Sonicflowai")
 st.markdown("---")
 
 # ── Sứ mệnh ──────────────────────────────────────────────────────────────────
 st.markdown("## 🎯 Sứ Mệnh")
 st.markdown("""
-**nhacheocon** ra đời với mục tiêu giúp các nhà sáng tạo nội dung — từ người mới bắt đầu đến
+**Sonicflowai** ra đời với mục tiêu giúp các nhà sáng tạo nội dung — từ người mới bắt đầu đến
 producer chuyên nghiệp — **tạo ra âm nhạc chất lượng cao mà không cần kiến thức âm nhạc chuyên sâu**.
 
 Chúng tôi tin rằng mỗi ý tưởng đều xứng đáng được nghe. AI chỉ là công cụ — bạn mới là người sáng tạo.
@@ -79,7 +79,7 @@ st.info("Mọi thắc mắc hoặc yêu cầu hỗ trợ, vui lòng liên hệ q
 
 st.markdown("---")
 ft = st.columns([3, 1, 1, 1])
-ft[0].markdown("🎵 **nhacheocon** © 2026")
+ft[0].markdown("🎵 **Sonicflowai** © 2026")
 ft[1].page_link("views/home.py",   label="Trang chủ")
 ft[2].page_link("views/guide.py",  label="Hướng dẫn")
 ft[3].page_link("views/policy.py", label="Chính sách")

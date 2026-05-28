@@ -2,7 +2,7 @@ import streamlit as st
 from auth import try_restore_session, handle_google_callback, process_pending_rt, is_admin
 
 st.set_page_config(
-    page_title="nhacheocon — AI Music Producer",
+    page_title="Sonicflowai — AI Music Producer",
     page_icon="🎵",
     layout="wide",
     initial_sidebar_state="collapsed",

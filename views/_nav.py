@@ -29,7 +29,7 @@ def render():
         c0, c1, c2, c3, c4, c5, c6 = st.columns([2.2, 1, 1, 1, 1, 1, 1.6])
         c7 = None
 
-    c0.markdown("#### 🎵 **nhacheocon**")
+    c0.markdown("#### 🎵 **Sonicflowai**")
     c1.page_link("views/home.py",      label="Trang chủ")
     c2.page_link("views/app_music.py", label="Ứng dụng")
     c3.page_link("views/about.py",     label="Giới thiệu")

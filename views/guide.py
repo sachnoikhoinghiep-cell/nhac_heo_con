@@ -153,7 +153,7 @@ for q, a in faqs:
 
 st.markdown("---")
 ft = st.columns([3, 1, 1, 1])
-ft[0].markdown("🎵 **nhacheocon** © 2026")
+ft[0].markdown("🎵 **Sonicflowai** © 2026")
 ft[1].page_link("views/home.py",   label="Trang chủ")
 ft[2].page_link("views/about.py",  label="Giới thiệu")
 ft[3].page_link("views/policy.py", label="Chính sách")

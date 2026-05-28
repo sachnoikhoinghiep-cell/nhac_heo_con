@@ -9,11 +9,11 @@ import supabase_db as sdb
 from datetime import datetime, timezone, timedelta
 import extra_streamlit_components as stx
 
-_COOKIE_KEY  = "nhacheocon_rt"
+_COOKIE_KEY  = "sonicflowai_rt"
 _COOKIE_DAYS = 30
 
 def _cookie_mgr():
-    return stx.CookieManager(key="nhacheocon_cm")
+    return stx.CookieManager(key="sonicflowai_cm")
 
 def _ctx_cookie(name: str) -> str:
     """Đọc cookie từ HTTP request headers — hoạt động ngay lần render đầu tiên.
@@ -64,7 +64,7 @@ def _clear_rt():
 # ---------------------------------------------------------------------------
 # API key persistence
 # ---------------------------------------------------------------------------
-_APIKEY_COOKIE = "nhacheocon_ak"
+_APIKEY_COOKIE = "sonicflowai_ak"
 
 def save_api_keys(anthropic: str, google: str, suno: str, fal: str = ""):
     """Lưu API keys vào cookie (fallback cho user chưa login)."""
@@ -109,7 +109,7 @@ def load_user_api_keys(uid: str) -> dict:
 # ---------------------------------------------------------------------------
 # Preset persistence
 # ---------------------------------------------------------------------------
-_PRESETS_COOKIE = "nhacheocon_presets"
+_PRESETS_COOKIE = "sonicflowai_presets"
 _PRESETS_MAX    = 10
 
 def save_presets(presets: list):
