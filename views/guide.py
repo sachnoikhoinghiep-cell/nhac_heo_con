@@ -152,8 +152,9 @@ for q, a in faqs:
         st.markdown(a)
 
 st.markdown("---")
-ft = st.columns([3, 1, 1, 1])
+ft = st.columns([3, 1, 1, 1, 1])
 ft[0].markdown("🎵 **Sonicflowai** © 2026")
 ft[1].page_link("views/home.py",   label="Trang chủ")
 ft[2].page_link("views/about.py",  label="Giới thiệu")
 ft[3].page_link("views/policy.py", label="Chính sách")
+ft[4].markdown('<a href="tg://user?id=5117664843" target="_blank" style="color:#229ED9;text-decoration:none;">💬 Hỗ trợ</a>', unsafe_allow_html=True)
