@@ -1336,8 +1336,7 @@ with st.sidebar:
             + "\n".join(f"• Phần {i+1}: Tracks {s}–{e}" for i, (s, e) in enumerate(batches))
         )
 
-    st.subheader("🎨 Tùy chọn Visual")
-    create_mv = st.checkbox("Tạo kịch bản MV (Video 2)", key="create_mv_check")
+    create_mv = False
 
     st.divider()
     # ── Presets ──────────────────────────────────────────────────────────────
