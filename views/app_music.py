@@ -1281,60 +1281,7 @@ api_key = st.session_state.get("anthropic_api_key", "")
 with st.sidebar:
     st.header("⚙️ Cấu hình quy trình")
 
-    st.text_input(
-        "Anthropic API Key:",
-        type="password",
-        key="anthropic_api_key",
-        placeholder="sk-ant-...",
-    )
-    st.caption("[Lấy Anthropic API key](https://console.anthropic.com)")
-
-    st.subheader("🎵 Suno Music Generation")
-    st.text_input(
-        "Suno API Key:",
-        type="password",
-        key="suno_api_key",
-        placeholder="Suno API key...",
-    )
-    st.caption("[Lấy Suno API key](https://sunoapi.org)")
-    st.selectbox(
-        "Suno Model:",
-        ["V5_5", "V5", "V4_5PLUS", "V4_5", "V4"],
-        key="suno_model",
-        help="V5_5/V5: up to 8 phút | V4: up to 4 phút",
-    )
-
-    # Suno credit — sunoapi.org does not expose a credit API endpoint
-    if st.session_state.get("suno_api_key"):
-        st.caption("💳 [Xem credit tại sunoapi.org](https://sunoapi.org/dashboard)")
-
-    st.subheader("🎬🖼️ fal.ai – Video & Ảnh")
-    st.text_input(
-        "fal.ai API Key:",
-        type="password",
-        key="fal_api_key",
-        placeholder="fal-...",
-    )
-    st.caption("[Lấy fal.ai API key](https://fal.ai/dashboard)")
-    st.caption("Dùng cho cả **tạo ảnh thumbnail** (Nano Banana Pro) và **tạo video** (Seedance 2.0)")
-
-    if st.button("💾 Lưu API Keys", use_container_width=True):
-        _k_ant  = st.session_state.get("anthropic_api_key", "")
-        _k_suno = st.session_state.get("suno_api_key", "")
-        _k_fal  = st.session_state.get("fal_api_key", "")
-        # Lưu vào Firestore nếu đã đăng nhập
-        _save_user = st.session_state.get("user")
-        if _save_user:
-            try:
-                save_user_api_keys(_save_user["uid"], _k_ant, "", _k_suno, _k_fal)
-                st.success("✅ Đã lưu vào tài khoản! Tự động điền khi đăng nhập.")
-            except Exception as _se:
-                st.warning(f"Không lưu được vào tài khoản: {_se}")
-        else:
-            # Fallback: lưu cookie khi chưa login
-            save_api_keys(_k_ant, "", _k_suno, _k_fal)
-            st.success("Đã lưu vào trình duyệt! Đăng nhập để lưu vào tài khoản.")
-
+    st.info("🔑 Cấu hình API Keys trong tab **🔑 API Keys** bên dưới.")
     st.divider()
     st.subheader("🎼 Phong cách âm nhạc")
     music_genre = st.radio("Chọn thể loại:", GENRE_NAMES, index=0, key="music_genre")
@@ -1847,6 +1794,138 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                 st.markdown(f"**BGM:** {data.get('bgm_suggestion', '')}")
                 st.divider()
                 seo_copy_block(seo, data.get("bgm_suggestion", ""), gcfg["hashtags"])
+
+# ---------------------------------------------------------------------------
+# Main tabs
+# ---------------------------------------------------------------------------
+tab_music, tab_api = st.tabs(["🎵 Tạo nhạc", "🔑 API Keys"])
+
+# ── API Keys tab ──────────────────────────────────────────────────────────────
+with tab_api:
+    st.markdown("""
+    <style>
+    .apicard {
+        padding: 0.85rem 1rem; border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.09);
+        background: #0d0d0d; margin-bottom: 0.4rem;
+    }
+    .apicard.sel {
+        border-color: rgba(34,197,94,0.5);
+        background: rgba(34,197,94,0.07);
+    }
+    .apicard-name { font-weight: 700; font-size: 0.95rem; color: #fff; }
+    .apicard-ok   { font-size: 0.72rem; color: #22c55e; margin-top: 0.1rem; }
+    .apicard-miss { font-size: 0.72rem; color: rgba(255,255,255,0.38); margin-top: 0.1rem; }
+    .api-form-hdr {
+        font-size: 1.3rem; font-weight: 800; color: #fff;
+        display: flex; align-items: center; gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _APIPROV = [
+        {"id": "anthropic", "icon": "🤖", "name": "Anthropic Claude",
+         "key": "anthropic_api_key", "ph": "sk-ant-api03-..."},
+        {"id": "suno",      "icon": "🎵", "name": "Suno API",
+         "key": "suno_api_key",       "ph": "Nhập Suno API key..."},
+        {"id": "fal",       "icon": "🖼️",  "name": "fal.ai",
+         "key": "fal_api_key",        "ph": "fal-..."},
+    ]
+
+    _api_left, _api_right = st.columns([1, 2.5], gap="large")
+
+    # ── Left: provider cards ──────────────────────────────────────────────────
+    with _api_left:
+        st.markdown("**Chọn dịch vụ API**")
+        for _ap in _APIPROV:
+            _has   = bool(st.session_state.get(_ap["key"], "").strip())
+            _issel = st.session_state.get("_api_sel", "anthropic") == _ap["id"]
+            st.markdown(f"""
+            <div class="apicard {'sel' if _issel else ''}">
+                <div class="apicard-name">{_ap['icon']} &nbsp;{_ap['name']}</div>
+                <div class="{'apicard-ok' if _has else 'apicard-miss'}">
+                    {'● Đã cấu hình' if _has else '○ Chưa có key'}
+                </div>
+            </div>""", unsafe_allow_html=True)
+            if st.button("Chọn", key=f"selapi_{_ap['id']}", use_container_width=True,
+                         type="primary" if _issel else "secondary"):
+                st.session_state["_api_sel"] = _ap["id"]
+                st.rerun()
+
+    # ── Right: form ───────────────────────────────────────────────────────────
+    _selid = st.session_state.get("_api_sel", "anthropic")
+    _selap = next(p for p in _APIPROV if p["id"] == _selid)
+
+    with _api_right:
+        st.markdown(f'<div class="api-form-hdr">{_selap["icon"]} {_selap["name"].upper()}</div>',
+                    unsafe_allow_html=True)
+        st.markdown("---")
+
+        _newkey = st.text_input(
+            "API Key:",
+            type="password",
+            value=st.session_state.get(_selap["key"], ""),
+            placeholder=_selap["ph"],
+            key=f"apikey_{_selid}",
+        )
+
+        _newmodel = None
+
+        if _selid == "anthropic":
+            st.markdown("**Model đang hoạt động:**")
+            st.markdown(
+                "- **claude-sonnet-4-6** — Viết lyrics, album, storyboard MV\n"
+                "- **claude-haiku-4-5-20251001** — Script video, gợi ý chủ đề, keywords\n"
+            )
+            st.caption("Hệ thống tự chọn model phù hợp cho từng tác vụ. Không cần cấu hình thêm.")
+
+        elif _selid == "suno":
+            st.markdown("**Model tạo nhạc:**")
+            _sopts = ["V5_5", "V5", "V4_5PLUS", "V4_5", "V4"]
+            _scur  = st.session_state.get("suno_model", "V5_5")
+            _newmodel = st.radio(
+                "suno_model:", _sopts,
+                index=_sopts.index(_scur) if _scur in _sopts else 0,
+                horizontal=True,
+                key="suno_model_tab",
+                label_visibility="collapsed",
+            )
+            st.caption("**V5_5 / V5**: thời lượng đến 8 phút  ·  **V4_5 / V4**: đến 4 phút")
+            st.caption("[Xem credit tại sunoapi.org →](https://sunoapi.org/dashboard)")
+
+        else:
+            st.markdown("**Dùng cho:**")
+            st.markdown(
+                "- 🖼️ **Tạo ảnh thumbnail** — Nano Banana Pro (16:9, 1K/2K/4K)\n"
+                "- 🎬 **Tạo video MV** — Seedance 2.0 (Text-to-Video / Image-to-Video)\n"
+            )
+            st.caption("[Lấy fal.ai API key →](https://fal.ai/dashboard)")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button(f"✅ Activate — {_selap['name']}", key=f"activate_{_selid}",
+                     type="primary", use_container_width=True):
+            st.session_state[_selap["key"]] = _newkey.strip()
+            if _selid == "suno" and _newmodel:
+                st.session_state["suno_model"] = _newmodel
+            _au  = st.session_state.get("anthropic_api_key", "")
+            _su  = st.session_state.get("suno_api_key", "")
+            _fu  = st.session_state.get("fal_api_key", "")
+            _usr = st.session_state.get("user")
+            if _usr:
+                try:
+                    save_user_api_keys(_usr["uid"], _au, "", _su, _fu)
+                    st.success(f"✅ **{_selap['name']}** đã kích hoạt và lưu vào tài khoản!")
+                except Exception as _e:
+                    st.warning(f"Đã lưu vào phiên. Lỗi lưu tài khoản: {_e}")
+            else:
+                save_api_keys(_au, "", _su, _fu)
+                st.success(f"✅ **{_selap['name']}** đã kích hoạt!")
+
+# ── Music tab placeholder ──────────────────────────────────────────────────────
+with tab_music:
+    if not st.session_state.get("music_result"):
+        st.caption("Nhấn **🚀 Bắt đầu sản xuất** ở sidebar để tạo nhạc. Kết quả hiển thị bên dưới.")
 
 # ---------------------------------------------------------------------------
 # Main logic
