@@ -193,7 +193,7 @@ with tab_plan:
         st.divider()
 
         if is_paid and plan:
-            from supabase_db import get_active_subscription
+            from supabase_db import get_active_subscription, _from_iso
             _sub = get_active_subscription(uid) or {}
 
             paid_at    = _from_iso(_sub.get("paid_at") or _sub.get("started_at"))
