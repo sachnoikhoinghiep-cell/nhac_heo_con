@@ -14,7 +14,7 @@ st.markdown("""
     border: 1px solid rgba(102,126,234,0.3);
 }
 .hero h1 { font-size: 2.8rem; font-weight: 900; margin-bottom: 0.6rem; }
-.hero p  { font-size: 1.15rem; color: rgba(255,255,255,0.75); max-width: 620px; margin: 0 auto 2rem; line-height: 1.7; }
+.hero p  { font-size: 1.15rem; color: rgba(255,255,255,0.75); max-width: 640px; margin: 0 auto 2rem; line-height: 1.7; }
 .feat-card {
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.08);
@@ -22,7 +22,6 @@ st.markdown("""
     padding: 1.6rem 1.2rem;
     text-align: center;
     height: 100%;
-    transition: border 0.2s;
 }
 .feat-icon { font-size: 2.2rem; margin-bottom: 0.6rem; }
 .feat-card h4 { margin: 0.4rem 0; font-size: 1rem; }
@@ -39,7 +38,7 @@ st.markdown("""
     background: linear-gradient(160deg, rgba(102,126,234,0.18) 0%, rgba(118,75,162,0.18) 100%);
     border: 2px solid #667eea;
 }
-.price-amount { font-size: 2.4rem; font-weight: 900; color: #818cf8; }
+.price-amount { font-size: 2rem; font-weight: 900; color: #818cf8; }
 .price-period { color: rgba(255,255,255,0.45); font-size: 0.85rem; margin-bottom: 1.2rem; }
 .price-list   { text-align: left; padding-left: 1.2rem; color: rgba(255,255,255,0.7); font-size: 0.88rem; line-height: 2; }
 .badge {
@@ -63,9 +62,9 @@ st.markdown("""
 # ── Hero ─────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="hero">
-  <h1>🎵 AI Music Producer</h1>
-  <p>Tạo nhạc chuyên nghiệp từ ý tưởng đến bài hát hoàn chỉnh chỉ trong vài phút —<br>
-     nhờ sức mạnh của <b>Claude AI</b>, <b>Suno</b> và <b>Google Gemini</b>.</p>
+  <h1>🎵 Sonicflowai — AI Music Producer</h1>
+  <p>Tạo nhạc chuyên nghiệp từ ý tưởng đến bài hát hoàn chỉnh chỉ trong vài phút.<br>
+     Hỗ trợ <b>10 thể loại nhạc</b>, tự động viết lời, tạo beat và SEO YouTube.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -77,8 +76,8 @@ with cb:
 st.markdown("<br>", unsafe_allow_html=True)
 s1, s2, s3, s4 = st.columns(4)
 s1.metric("Thể loại nhạc", "10+")
-s2.metric("Bài mỗi lần tạo", "20")
-s3.metric("Suno Models", "5")
+s2.metric("Bài tối đa/lần", "20")
+s3.metric("Model Suno", "5")
 s4.metric("Ngôn ngữ", "3")
 
 # ── Features ──────────────────────────────────────────────────────────────────
@@ -88,13 +87,13 @@ f1, f2, f3, f4 = st.columns(4, gap="medium")
 
 for col, icon, title, desc in [
     (f1, "🤖", "AI Viết Lời & Cấu Trúc",
-     "Claude AI tạo lời bài hát, cấu trúc âm nhạc và style tags chuyên nghiệp theo từng thể loại."),
+     "Claude AI tự động viết lời bài hát, cấu trúc âm nhạc và style tags chuyên nghiệp theo từng thể loại."),
     (f2, "🎶", "Tạo Nhạc Với Suno",
-     "Gửi thẳng lên Suno API, nhận file MP3 chất lượng cao — 2 phiên bản cho mỗi bài, tải về trực tiếp."),
-    (f3, "🖼️", "Ảnh Thumbnail AI",
-     "Gemini tự tạo thumbnail và ảnh bìa 16:9 đẹp, 8K resolution, sẵn sàng đăng YouTube."),
-    (f4, "📊", "SEO Tối Ưu",
-     "Title, description, tags và hashtags được tối ưu cho thuật toán YouTube, TikTok."),
+     "Kết nối trực tiếp Suno API — nhận file MP3 chất lượng cao, 2 phiên bản mỗi bài, tải về ngay."),
+    (f3, "🖼️", "Ảnh & Video MV",
+     "Tạo thumbnail 16:9 sắc nét cùng kịch bản MV chi tiết, sẵn sàng đăng YouTube."),
+    (f4, "📊", "SEO Tự Động",
+     "Tiêu đề, mô tả, hashtag tối ưu cho thuật toán YouTube — không cần tốn thêm thời gian."),
 ]:
     with col:
         st.markdown(f"""
@@ -110,12 +109,12 @@ st.markdown("---")
 st.markdown("### ⚡ Chỉ 3 bước đơn giản")
 h1, h2, h3 = st.columns(3, gap="large")
 for col, num, title, desc in [
-    (h1, "1", "Chọn thể loại & chủ đề",
-     "Chọn 1 trong 10 thể loại nhạc, nhập chủ đề bài hát hoặc dùng AI gợi ý chủ đề trending."),
-    (h2, "2", "Claude AI sản xuất nội dung",
-     "Hệ thống tự động viết lời, tạo style tags, kịch bản MV và toàn bộ metadata SEO."),
-    (h3, "3", "Tải nhạc & đăng lên YouTube",
-     "Nhấn 'Tạo nhạc Suno' — MP3 sẵn sàng trong vài phút. Tải về và đăng lên ngay!"),
+    (h1, "1", "Chọn thể loại & nhập chủ đề",
+     "Chọn 1 trong 10 thể loại nhạc, nhập chủ đề bài hát hoặc để AI gợi ý chủ đề đang trending."),
+    (h2, "2", "AI sản xuất toàn bộ nội dung",
+     "Hệ thống tự động viết lời, tạo style tags, kịch bản MV và toàn bộ nội dung SEO."),
+    (h3, "3", "Tải nhạc & đăng YouTube",
+     "Nhấn 'Tạo nhạc Suno' — file MP3 sẵn sàng trong vài phút. Tải về và đăng lên ngay!"),
 ]:
     with col:
         st.markdown(f"<div class='step-num'>{num}</div>", unsafe_allow_html=True)
@@ -124,7 +123,7 @@ for col, num, title, desc in [
 
 # ── Genres ───────────────────────────────────────────────────────────────────
 st.markdown("---")
-st.markdown("### 🎸 10 Thể Loại Nhạc")
+st.markdown("### 🎸 10 Thể Loại Nhạc Hỗ Trợ")
 genres_html = "".join(f'<span class="badge">{g}</span>' for g in [
     "🎵 Thiếu Nhi", "💃 Nhạc Sàn EDM", "🔥 Vinahouse Remix", "🌀 Nonstop Mix",
     "🔊 Bass-Boosted", "🕶️ G-House", "🌀 Psytrance", "🤠 Brazilian Phonk",
@@ -135,14 +134,19 @@ st.markdown(f'<div style="text-align:center;padding:1.2rem 0;">{genres_html}</di
 
 # ── Pricing ───────────────────────────────────────────────────────────────────
 st.markdown("---")
-st.markdown("### 💰 Bảng Giá — Đơn giản & Minh bạch")
+st.markdown("### 💰 Bảng Giá — Thanh toán chuyển khoản ngân hàng nội địa")
+st.caption("Hỗ trợ tất cả ngân hàng Việt Nam qua cổng SePay — không cần thẻ quốc tế.")
 
 p1, p2, p3, p4 = st.columns(4, gap="medium")
 pricing = [
-    ("Ngày",  "$0.99",  "/ 24 giờ",  ["Dùng thử không giới hạn", "Tất cả thể loại nhạc", "Tối đa 20 bài/lần"], False),
-    ("Tuần",  "$4.99",  "/ 7 ngày",  ["Tiết kiệm 30% so với ngày", "Tất cả thể loại nhạc", "Tối đa 20 bài/lần"], False),
-    ("Tháng", "$14.99", "/ 30 ngày", ["⭐ Phổ biến nhất!", "Tất cả thể loại nhạc", "Tối đa 20 bài/lần"], True),
-    ("Năm",   "$99.99", "/ 365 ngày",["Gói chuyên nghiệp VIP", "Tất cả thể loại nhạc", "Tối đa 20 bài/lần"], False),
+    ("☀️ Ngày",  "19.000 ₫",  "/ 24 giờ",
+     ["Trải nghiệm toàn bộ tính năng", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Tạo ảnh thumbnail AI"], False),
+    ("📅 Tuần",  "69.000 ₫",  "/ 7 ngày",
+     ["Phù hợp dự án ngắn hạn", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Tạo video MV AI"], False),
+    ("🗓️ Tháng", "199.000 ₫", "/ 30 ngày",
+     ["⭐ Phổ biến nhất!", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Lưu lịch sử không giới hạn"], True),
+    ("⭐ Năm",   "1.490.000 ₫","/ 365 ngày",
+     ["Tiết kiệm hơn 37%", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Ưu tiên cập nhật tính năng mới"], False),
 ]
 for col, (name, price, period, features, is_hot) in zip([p1, p2, p3, p4], pricing):
     with col:
@@ -166,9 +170,10 @@ with cta2:
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center; padding: 2.5rem 1rem;">
-  <h2>Sẵn sàng tạo nhạc của bạn? 🎵</h2>
+  <h2>🎵 Sẵn sàng tạo nhạc của bạn?</h2>
   <p style="color: rgba(255,255,255,0.55); margin-bottom: 1.5rem;">
-    Đăng nhập bằng Google — miễn phí, không cần thẻ ngay lập tức.
+    Đăng nhập bằng Google — miễn phí và không cần thẻ tín dụng.<br>
+    Thanh toán qua chuyển khoản ngân hàng nội địa, kích hoạt ngay trong vài giây.
   </p>
 </div>
 """, unsafe_allow_html=True)
