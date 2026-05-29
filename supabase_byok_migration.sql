@@ -17,11 +17,12 @@ WHERE name IN ('Trải Nghiệm', 'Content Creator', 'Agency / VIP', 'Nạp Thê
 
 -- 3. Thêm gói Tự Túc (BYOK)
 INSERT INTO subscription_plans
-    (name, price_vnd, duration_days, initial_credits, plan_type, service_type, description, is_active)
+    (name, price_usd, price_vnd, duration_days, initial_credits, plan_type, service_type, description, is_active)
 VALUES
-    ('Gói Tự Túc', 149000, 30, 0, 'subscription', 'byok',
+    ('Gói Tự Túc', 0, 149000, 30, 0, 'subscription', 'byok',
      'Unlimited — dùng API Key cá nhân, không giới hạn số lần tạo', TRUE)
 ON CONFLICT (name) DO UPDATE SET
+    price_usd    = EXCLUDED.price_usd,
     price_vnd    = EXCLUDED.price_vnd,
     service_type = EXCLUDED.service_type,
     description  = EXCLUDED.description,
