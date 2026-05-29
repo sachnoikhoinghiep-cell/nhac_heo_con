@@ -129,6 +129,11 @@ def load_presets() -> list:
         return []
 
 PLAN_DURATION = {
+    # Các gói mới (credit-based)
+    "Trải Nghiệm":     timedelta(days=1),
+    "Content Creator": timedelta(days=30),
+    "Agency / VIP":    timedelta(days=30),
+    # Các gói cũ (giữ lại để tương thích ngược với dữ liệu lịch sử)
     "Ngày":  timedelta(days=1),
     "Tuần":  timedelta(weeks=1),
     "Tháng": timedelta(days=30),
@@ -542,3 +547,85 @@ def update_history_item(uid: str, project_id: str, updates: dict):
             mapped[k] = updates[k]
     if mapped:
         sdb.update_project(project_id, mapped)
+
+
+# ---------------------------------------------------------------------------
+# Admin — payment / refund
+# ---------------------------------------------------------------------------
+def admin_get_payments(status: str = "completed", limit: int = 100) -> list:
+    try:
+        return sdb.admin_get_payments(status=status, limit=limit)
+    except Exception:
+        return []
+
+
+def admin_process_refund(payment_id: str, user_id: str, reason: str = "") -> bool:
+    try:
+        return sdb.admin_process_refund(payment_id, user_id, reason)
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Credits / Coins
+# ---------------------------------------------------------------------------
+def deduct_coins(uid: str, amount: int = 1) -> int:
+    """Trừ `amount` Xu. Trả về số Xu còn lại."""
+    try:
+        return sdb.deduct_coins(uid, amount)
+    except Exception:
+        return 0
+
+
+def deduct_credit(uid: str) -> int:
+    """Alias — trừ 1 Xu (tương thích ngược)."""
+    return deduct_coins(uid, 1)
+
+
+def add_credits_topup(uid: str, credits_to_add: int) -> dict:
+    try:
+        return sdb.add_credits_topup(uid, credits_to_add)
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Support tickets (user-facing)
+# ---------------------------------------------------------------------------
+def create_support_ticket(uid: str, issue_type: str, description: str,
+                          bank_details: str = "", payment_id: str = "") -> dict:
+    try:
+        return sdb.create_support_ticket(uid, issue_type, description, bank_details, payment_id)
+    except Exception:
+        return {}
+
+
+def get_user_tickets(uid: str) -> list:
+    try:
+        return sdb.get_user_tickets(uid)
+    except Exception:
+        return []
+
+
+def get_user_completed_payments(uid: str) -> list:
+    try:
+        return sdb.get_user_completed_payments(uid)
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Support tickets (admin-facing)
+# ---------------------------------------------------------------------------
+def admin_get_tickets(status: str = "pending", limit: int = 100) -> list:
+    try:
+        return sdb.admin_get_tickets(status=status, limit=limit)
+    except Exception:
+        return []
+
+
+def admin_resolve_ticket(ticket_id: str, note: str = "", status: str = "resolved"):
+    try:
+        sdb.admin_resolve_ticket(ticket_id, note, status)
+    except Exception:
+        pass

@@ -375,18 +375,16 @@ st.markdown("""
 <div class="sec-sub">Hỗ trợ tất cả ngân hàng Việt Nam qua cổng SePay — không cần thẻ quốc tế.</div>
 """, unsafe_allow_html=True)
 
-p1, p2, p3, p4 = st.columns(4, gap="medium")
+p1, p2, p3 = st.columns(3, gap="medium")
 pricing = [
-    ("☀️ Ngày",  "19.000 ₫",  "/ 24 giờ",
-     ["Trải nghiệm toàn bộ tính năng", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Tạo ảnh thumbnail AI"], False),
-    ("📅 Tuần",  "69.000 ₫",  "/ 7 ngày",
-     ["Phù hợp dự án ngắn hạn", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Tạo video MV AI"], False),
-    ("🗓️ Tháng", "199.000 ₫", "/ 30 ngày",
-     ["Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Lưu lịch sử không giới hạn", "Ưu tiên hỗ trợ"], True),
-    ("⭐ Năm",   "1.490.000 ₫","/ 365 ngày",
-     ["Tiết kiệm hơn 37%", "Tất cả 10 thể loại nhạc", "Tối đa 20 bài mỗi lần", "Ưu tiên cập nhật tính năng"], False),
+    ("🎯 Trải Nghiệm",      "49.000 ₫",   "100 Xu · 24 giờ",
+     ["≈14 MV hoàn chỉnh (Script+Ảnh+Nhạc)", "1 Xu = 1 Script hoặc 1 Ảnh", "5 Xu = 1 bài nhạc Suno", "Thử toàn bộ tính năng"], False),
+    ("🚀 Content Creator",  "499.000 ₫",  "1.200 Xu · 30 ngày",
+     ["≈171 MV · 2–3 video/ngày cả tháng", "Duy trì 1–2 kênh YouTube", "Lưu lịch sử không giới hạn", "Ưu tiên hỗ trợ"], True),
+    ("👑 Agency / VIP",     "999.000 ₫",  "3.000 Xu · 30 ngày",
+     ["≈428 MV · quản lý đa kênh", "Cinematic Drill, Hòa tấu ngách", "Không giới hạn thể loại", "Ưu tiên cập nhật tính năng"], False),
 ]
-for col, (name, price, period, features, is_hot) in zip([p1, p2, p3, p4], pricing):
+for col, (name, price, period, features, is_hot) in zip([p1, p2, p3], pricing):
     with col:
         hot_class = "hot" if is_hot else ""
         hot_tag   = '<div class="hot-tag">⭐ Phổ biến nhất</div>' if is_hot else ""
@@ -401,6 +399,25 @@ for col, (name, price, period, features, is_hot) in zip([p1, p2, p3, p4], pricin
         </div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
+
+# Top-up option
+st.markdown("""
+<div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.4);
+     border-radius:12px;padding:1rem 1.5rem;margin-top:0.5rem;display:flex;
+     align-items:center;gap:1rem;flex-wrap:wrap;">
+  <div style="font-size:1.5rem;">🔋</div>
+  <div style="flex:1;min-width:200px;">
+    <b style="color:#a78bfa;">Nạp Thêm Xu</b>
+    <span style="color:rgba(255,255,255,0.7);font-size:0.85rem;margin-left:8px;">
+      100.000 ₫ → +300 Xu cộng ngay vào gói đang dùng (≈42 MV)
+    </span>
+  </div>
+  <span style="background:#8b5cf6;color:#fff;padding:3px 12px;border-radius:9999px;font-size:0.8rem;">
+    Không cần gia hạn
+  </span>
+</div>
+""", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 cta1, cta2, cta3 = st.columns([3, 2, 3])
 with cta2:

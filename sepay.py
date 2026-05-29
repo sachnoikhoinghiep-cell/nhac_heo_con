@@ -20,30 +20,64 @@ from supabase_config import get_supabase
 # Bảng giá VNĐ — đồng bộ với subscription_plans.price_vnd
 # ---------------------------------------------------------------------------
 PLANS_VND = {
-    "Ngày":  {
-        "price_vnd": 19_000,
-        "desc":      "Thử nghiệm hệ thống, xem luồng tự động hóa",
-        "badge":     "Thử nghiệm",
+    "Trải Nghiệm": {
+        "price_vnd": 49_000,
+        "credits":   100,
+        "duration":  "24 giờ",
+        "desc":      "100 Xu — tạo ~14 MV hoàn chỉnh (Script+Ảnh+Nhạc)",
+        "badge":     "Dùng thử",
         "color":     "#3b82f6",
     },
-    "Tuần":  {
-        "price_vnd": 69_000,
-        "desc":      "Đẩy nhanh tiến độ 1–2 kênh YouTube trong tuần",
-        "badge":     "Dự án ngắn",
-        "color":     "#8b5cf6",
-    },
-    "Tháng": {
-        "price_vnd": 199_000,
-        "desc":      "Công cụ làm việc chính cho content creator",
+    "Content Creator": {
+        "price_vnd": 499_000,
+        "credits":   1_200,
+        "duration":  "30 ngày",
+        "desc":      "1.200 Xu — duy trì 2–3 MV/ngày suốt tháng",
         "badge":     "Phổ biến nhất ⭐",
         "color":     "#f59e0b",
     },
-    "Năm":   {
-        "price_vnd": 1_490_000,
-        "desc":      "Ưu tiên cập nhật dòng nhạc & kịch bản video 2 mới",
-        "badge":     "Chuyên gia",
+    "Agency / VIP": {
+        "price_vnd": 999_000,
+        "credits":   3_000,
+        "duration":  "30 ngày",
+        "desc":      "3.000 Xu — quản lý đa kênh, dòng nhạc ngách đặc biệt",
+        "badge":     "Agency",
         "color":     "#10b981",
     },
+}
+
+TOPUP_VND = {
+    "Nạp Thêm": {
+        "price_vnd": 100_000,
+        "credits":   300,
+        "desc":      "Cộng ngay 300 Xu vào gói đang dùng — không cần gia hạn",
+        "badge":     "Nạp thêm",
+        "color":     "#8b5cf6",
+    },
+}
+
+# Bảng quy đổi Xu theo tác vụ (dùng trong UI để hiển thị giá)
+COIN_COSTS = {
+    "script": 1,   # Sinh kịch bản / lời nhạc (LLM)
+    "image":  1,   # Tạo / đổi ảnh (fal.ai)
+    "suno":   5,   # Render nhạc Suno
+}
+
+# Gói BYOK — dùng API Key cá nhân, không trừ Xu
+BYOK_PLAN = {
+    "Gói Tự Túc": {
+        "price_vnd": 149_000,
+        "duration":  "30 ngày",
+        "desc":      "Dùng API Key cá nhân — không giới hạn số lần tạo MV",
+        "badge":     "BYOK · Unlimited",
+        "color":     "#6366f1",
+        "features": [
+            "Không giới hạn script, ảnh, nhạc",
+            "Toàn bộ Master Prompt độc quyền",
+            "Bảo mật Key tuyệt đối (key không rời thiết bị bạn)",
+            "Dành cho Pro MMO & Agency",
+        ],
+    }
 }
 
 

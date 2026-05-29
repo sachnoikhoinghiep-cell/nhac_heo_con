@@ -1,5 +1,6 @@
 import streamlit as st
 import anthropic
+from llm_router import generate_text, provider_label
 from auth import (
     show_auth_ui, verify_and_load_user,
     activate_plan, save_music_history, get_music_history, sign_out,
@@ -34,7 +35,8 @@ from prompts import (
 # ---------------------------------------------------------------------------
 import sys, importlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sepay import PLANS_VND, create_payment_request, check_payment_status, fmt_vnd
+from sepay import PLANS_VND, TOPUP_VND, BYOK_PLAN, COIN_COSTS, create_payment_request, check_payment_status, fmt_vnd
+from auth import deduct_coins as _deduct_coins
 
 for _k, _v in {
     "user":             None,
@@ -84,20 +86,25 @@ if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
 
 # Chưa thanh toán → trang chọn gói SePay
 if not _user["is_paid"]:
-    _PAY = st.session_state.sepay_payment   # dict hoặc None
+    _PAY      = st.session_state.get("sepay_payment")
+    _BYOK_PAY = st.session_state.get("sepay_byok_payment")
 
-    # ── Auto-check: nếu đang chờ thanh toán, kiểm tra mỗi render ────────
+    # ── Auto-check cả 2 luồng thanh toán ─────────────────────────────────
+    def _refresh_user_after_payment(clear_key: str):
+        from supabase_db import load_user_with_subscription as _lwu
+        _r = _lwu(_user["uid"])
+        if _r.get("is_paid"):
+            st.session_state.user = _r
+            st.session_state.pop(clear_key, None)
+            st.rerun()
+
     if _PAY and _PAY.get("payment_code"):
-        _status = check_payment_status(_PAY["payment_code"])
-        if _status == "completed":
-            # Reload user từ Supabase để lấy subscription mới
-            from auth import verify_and_load_user as _vlu
-            from supabase_db import load_user_with_subscription as _lwu
-            _refreshed = _lwu(_user["uid"])
-            if _refreshed.get("is_paid"):
-                st.session_state.user = _refreshed
-                st.session_state.sepay_payment = None
-                st.rerun()
+        if check_payment_status(_PAY["payment_code"]) == "completed":
+            _refresh_user_after_payment("sepay_payment")
+
+    if _BYOK_PAY and _BYOK_PAY.get("payment_code"):
+        if check_payment_status(_BYOK_PAY["payment_code"]) == "completed":
+            _refresh_user_after_payment("sepay_byok_payment")
 
     # ── Header ────────────────────────────────────────────────────────────
     st.markdown(f"""
@@ -105,116 +112,242 @@ if not _user["is_paid"]:
         <div style="font-size:3rem;">🎵</div>
         <h2>Chọn gói để bắt đầu tạo nhạc</h2>
         <p style="color:rgba(255,255,255,0.88); max-width:560px; margin:0 auto 0.5rem;">
-            Xin chào <b>{_user['name']}</b>!<br>
-            Phí nền tảng duy nhất — API Anthropic/Suno/fal.ai bạn tự điền, xài bao nhiêu tính bấy nhiêu.
+            Xin chào <b>{_user['name']}</b>! Chọn mô hình phù hợp nhất với bạn.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Bảng gói ─────────────────────────────────────────────────────────
-    _plan_cols = st.columns(4)
-    _selected_plan = st.session_state.get("_sel_plan", "Tháng")
-    for _ci, (_pname, _pinfo) in enumerate(PLANS_VND.items()):
-        with _plan_cols[_ci]:
-            _active = _selected_plan == _pname
-            _border = f"2px solid {_pinfo['color']}" if _active else "1px solid rgba(255,255,255,0.1)"
-            _bg     = f"{_pinfo['color']}22" if _active else "rgba(255,255,255,0.03)"
-            st.markdown(f"""
-            <div style="background:{_bg};border:{_border};border-radius:14px;padding:1rem 0.8rem;
-                        text-align:center;min-height:140px;">
-                <div style="font-weight:700;font-size:1rem;color:{_pinfo['color']};">{_pname}</div>
-                <div style="font-size:1.3rem;font-weight:800;margin:0.3rem 0;">
-                    {fmt_vnd(_pinfo['price_vnd'])}₫
+    # ── 2 Tab: Gói Trọn Gói vs Gói Tự Túc ───────────────────────────────
+    _tab_bundled, _tab_byok = st.tabs(["🪙 Gói Trọn Gói", "🔑 Gói Tự Túc (BYOK)"])
+
+    # ════ TAB 1: BUNDLED ═════════════════════════════════════════════════
+    with _tab_bundled:
+        st.caption("Platform lo API — bạn chỉ nạp Xu và tạo. Không cần thẻ Visa, không cần biết kỹ thuật.")
+        _plan_cols = st.columns(3)
+        _default_plan = "Content Creator"
+        _selected_plan = st.session_state.get("_sel_plan", _default_plan)
+        if _selected_plan not in PLANS_VND and _selected_plan not in TOPUP_VND:
+            _selected_plan = _default_plan
+
+        _all_plans = {**PLANS_VND, **TOPUP_VND}
+        for _ci, (_pname, _pinfo) in enumerate(PLANS_VND.items()):
+            with _plan_cols[_ci]:
+                _active = _selected_plan == _pname
+                _border = f"2px solid {_pinfo['color']}" if _active else "1px solid rgba(255,255,255,0.1)"
+                _bg     = f"{_pinfo['color']}22" if _active else "rgba(255,255,255,0.03)"
+                _credits_txt = f"{_pinfo['credits']:,} Xu · {_pinfo['duration']}"
+                st.markdown(f"""
+                <div style="background:{_bg};border:{_border};border-radius:14px;padding:1rem 0.8rem;
+                            text-align:center;min-height:160px;">
+                    <div style="font-weight:700;font-size:1rem;color:{_pinfo['color']};">{_pname}</div>
+                    <div style="font-size:1.3rem;font-weight:800;margin:0.3rem 0;">
+                        {fmt_vnd(_pinfo['price_vnd'])}₫
+                    </div>
+                    <div style="font-size:0.78rem;color:{_pinfo['color']};font-weight:600;margin-bottom:0.25rem;">
+                        🪙 {_credits_txt}
+                    </div>
+                    <div style="font-size:0.72rem;color:rgba(255,255,255,0.82);line-height:1.4;">
+                        {_pinfo['desc']}
+                    </div>
+                    <div style="margin-top:0.5rem;background:{_pinfo['color']};color:#fff;
+                                border-radius:9999px;font-size:0.68rem;padding:2px 8px;
+                                display:inline-block;">{_pinfo['badge']}</div>
                 </div>
-                <div style="font-size:0.72rem;color:rgba(255,255,255,0.82);line-height:1.4;">
-                    {_pinfo['desc']}
-                </div>
-                <div style="margin-top:0.5rem;background:{_pinfo['color']};color:#fff;
-                            border-radius:9999px;font-size:0.68rem;padding:2px 8px;
-                            display:inline-block;">{_pinfo['badge']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("Chọn", key=f"sel_{_pname}", use_container_width=True,
-                         type="primary" if _active else "secondary"):
-                st.session_state["_sel_plan"] = _pname
-                st.session_state.sepay_payment = None
-                st.rerun()
+                """, unsafe_allow_html=True)
+                if st.button("Chọn", key=f"sel_{_pname}", use_container_width=True,
+                             type="primary" if _active else "secondary"):
+                    st.session_state["_sel_plan"] = _pname
+                    st.session_state.pop("sepay_payment", None)
+                    st.rerun()
 
-    _selected_plan = st.session_state.get("_sel_plan", "Tháng")
-    _pinfo = PLANS_VND[_selected_plan]
-    st.divider()
+        # Top-up
+        _has_active_sub = _user.get("has_active_sub", False)
+        _topup_info   = TOPUP_VND["Nạp Thêm"]
+        _topup_active = _selected_plan == "Nạp Thêm"
+        _topup_bg     = f"{_topup_info['color']}22" if _topup_active else "rgba(255,255,255,0.02)"
+        _topup_border = f"2px solid {_topup_info['color']}" if _topup_active else "1px dashed rgba(139,92,246,0.4)"
+        st.markdown(f"""
+        <div style="background:{_topup_bg};border:{_topup_border};border-radius:12px;
+             padding:0.8rem 1.2rem;margin-top:0.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+          <div style="font-size:1.4rem;">🔋</div>
+          <div style="flex:1;min-width:180px;">
+            <b style="color:{_topup_info['color']};">Nạp Thêm Xu</b>
+            <span style="color:rgba(255,255,255,0.7);font-size:0.82rem;margin-left:8px;">
+              {fmt_vnd(_topup_info['price_vnd'])}₫ → +{_topup_info['credits']:,} Xu vào gói đang dùng
+            </span>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+        _t1, _t2 = st.columns([4, 1])
+        if _t2.button("Chọn Nạp", key="sel_topup", use_container_width=True,
+                      type="primary" if _topup_active else "secondary"):
+            st.session_state["_sel_plan"] = "Nạp Thêm"
+            st.session_state.pop("sepay_payment", None)
+            st.rerun()
+        if _topup_active and not _has_active_sub:
+            st.warning("⚠️ Nạp thêm chỉ hoạt động khi bạn đang có gói active.")
 
-    # ── Trạng thái QR hiện tại ────────────────────────────────────────────
-    if _PAY and _PAY.get("plan") == _selected_plan:
-        _status = check_payment_status(_PAY["payment_code"])
+        _selected_plan = st.session_state.get("_sel_plan", _default_plan)
+        if _selected_plan not in _all_plans:
+            _selected_plan = _default_plan
+        _pinfo = _all_plans[_selected_plan]
+        st.divider()
 
-        if _status == "pending":
-            _col_qr, _col_info = st.columns([1, 1.6])
-            with _col_qr:
-                if _PAY.get("qr_url"):
-                    st.image(_PAY["qr_url"], caption="Quét QR bằng app ngân hàng", width=220)
-                else:
-                    st.info("Không tạo được QR — vui lòng chuyển khoản thủ công.")
-
-            with _col_info:
-                st.markdown(f"### Chuyển khoản — Gói **{_selected_plan}**")
-                st.markdown(f"**Số tiền:** `{fmt_vnd(_PAY['amount_vnd'])} VNĐ`")
-                st.markdown(f"**Ngân hàng:** `{_PAY.get('account_name','')} — {_PAY.get('account_no','')}`")
-                st.markdown(f"**Nội dung CK (bắt buộc):**")
-                st.code(_PAY["payment_code"], language="text")
-                st.caption("⚠️ Nội dung chuyển khoản phải chứa đúng mã trên để hệ thống tự kích hoạt.")
-
-                _exp = _PAY.get("expires_at", "")
-                if _exp:
-                    try:
-                        _exp_dt = datetime.fromisoformat(_exp.replace("Z", "+00:00"))
-                        _mins   = max(0, int((_exp_dt - datetime.now(timezone.utc)).total_seconds() // 60))
-                        st.caption(f"⏱️ Mã hết hạn sau: **{_mins} phút**")
-                    except Exception:
-                        pass
-
-                _cb1, _cb2 = st.columns(2)
-                if _cb1.button("✅ Tôi đã chuyển khoản", type="primary", use_container_width=True):
-                    _s = check_payment_status(_PAY["payment_code"])
-                    if _s == "completed":
+        # QR section
+        if _PAY and _PAY.get("plan") == _selected_plan:
+            _status = check_payment_status(_PAY["payment_code"])
+            if _status == "pending":
+                _col_qr, _col_info = st.columns([1, 1.6])
+                with _col_qr:
+                    if _PAY.get("qr_url"):
+                        st.image(_PAY["qr_url"], caption="Quét QR bằng app ngân hàng", width=220)
+                with _col_info:
+                    st.markdown(f"### Chuyển khoản — **{_selected_plan}**")
+                    st.markdown(f"**Số tiền:** `{fmt_vnd(_PAY['amount_vnd'])} VNĐ`")
+                    st.markdown(f"**Ngân hàng:** `{_PAY.get('account_name','')} — {_PAY.get('account_no','')}`")
+                    st.markdown("**Nội dung CK (bắt buộc):**")
+                    st.code(_PAY["payment_code"], language="text")
+                    st.caption("⚠️ Nội dung chuyển khoản phải chứa đúng mã trên.")
+                    _exp = _PAY.get("expires_at", "")
+                    if _exp:
+                        try:
+                            _exp_dt = datetime.fromisoformat(_exp.replace("Z", "+00:00"))
+                            _mins = max(0, int((_exp_dt - datetime.now(timezone.utc)).total_seconds() // 60))
+                            st.caption(f"⏱️ Mã hết hạn sau: **{_mins} phút**")
+                        except Exception:
+                            pass
+                    _cb1, _cb2 = st.columns(2)
+                    if _cb1.button("✅ Tôi đã chuyển khoản", type="primary", use_container_width=True, key="ckbundled"):
+                        _s = check_payment_status(_PAY["payment_code"])
+                        if _s == "completed":
+                            st.rerun()
+                        elif _s == "pending":
+                            st.warning("Chưa nhận được. Chờ 10–30 giây rồi thử lại.")
+                        else:
+                            st.error(f"Trạng thái: {_s}. Vui lòng tạo mã mới.")
+                            st.session_state.pop("sepay_payment", None)
+                    if _cb2.button("🔄 Tạo mã mới", use_container_width=True, key="renewbundled"):
+                        st.session_state.pop("sepay_payment", None)
                         st.rerun()
-                    elif _s == "pending":
-                        st.warning("Chưa nhận được thanh toán. Vui lòng chờ 10–30 giây rồi thử lại.")
-                    else:
-                        st.error(f"Trạng thái: {_s}. Vui lòng tạo mã mới.")
-                        st.session_state.sepay_payment = None
-                if _cb2.button("🔄 Tạo mã mới", use_container_width=True):
-                    st.session_state.sepay_payment = None
+            elif _status == "expired":
+                st.warning("Mã đã hết hạn. Vui lòng tạo mã mới.")
+                st.session_state.pop("sepay_payment", None)
+                if st.button("🔄 Tạo mã mới", type="primary", key="newbundled2"):
                     st.rerun()
+            elif _status == "failed":
+                st.error("Giao dịch thất bại. Vui lòng liên hệ hỗ trợ.")
+                st.session_state.pop("sepay_payment", None)
+        else:
+            st.markdown(f"**Gói đã chọn:** {_selected_plan} — `{fmt_vnd(_pinfo['price_vnd'])} VNĐ`")
+            if st.button(f"📱 Tạo QR & Mã Thanh Toán — {_selected_plan}", type="primary", use_container_width=True):
+                with st.spinner("Đang tạo mã chuyển khoản…"):
+                    try:
+                        _req = create_payment_request(_user["uid"], _selected_plan)
+                        _req["plan"] = _selected_plan
+                        st.session_state.sepay_payment = _req
+                        st.rerun()
+                    except Exception as _e:
+                        st.error(f"Lỗi tạo thanh toán: {_e}")
 
-        elif _status == "expired":
-            st.warning("Mã thanh toán đã hết hạn (30 phút). Vui lòng tạo mã mới.")
-            st.session_state.sepay_payment = None
-            if st.button("🔄 Tạo mã thanh toán mới", type="primary"):
-                st.rerun()
-        elif _status == "failed":
-            st.error("Giao dịch thất bại (số tiền không khớp). Vui lòng liên hệ hỗ trợ.")
-            st.session_state.sepay_payment = None
+    # ════ TAB 2: BYOK ════════════════════════════════════════════════════
+    with _tab_byok:
+        _binfo = BYOK_PLAN["Gói Tự Túc"]
+        st.markdown(f"""
+        <div style="background:rgba(99,102,241,0.1);border:2px solid #6366f1;
+             border-radius:16px;padding:1.5rem;margin-bottom:1rem;">
+          <div style="font-size:1.6rem;font-weight:800;color:#818cf8;">🔑 {fmt_vnd(_binfo['price_vnd'])}₫ <span style="font-size:0.9rem;color:rgba(255,255,255,0.6);">/ {_binfo['duration']}</span></div>
+          <div style="margin:0.5rem 0 0.75rem;font-size:1.05rem;color:rgba(255,255,255,0.9);">
+            Gói Tự Túc — <b>Không Giới Hạn</b> với API Key cá nhân
+          </div>
+          <ul style="margin:0;padding-left:1.2rem;color:rgba(255,255,255,0.82);font-size:0.87rem;line-height:1.8;">
+            {''.join(f'<li>{f}</li>' for f in _binfo['features'])}
+          </ul>
+          <div style="margin-top:0.75rem;background:#6366f1;color:#fff;border-radius:9999px;
+               font-size:0.75rem;padding:3px 12px;display:inline-block;">{_binfo['badge']}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    else:
-        # Chưa có mã → nút tạo QR
-        st.markdown(f"**Gói đã chọn:** {_selected_plan} — `{fmt_vnd(_pinfo['price_vnd'])} VNĐ`")
-        if st.button(f"📱 Tạo QR & Mã Thanh Toán — {_selected_plan}",
-                     type="primary", use_container_width=True):
-            with st.spinner("Đang tạo mã chuyển khoản…"):
-                try:
-                    _req = create_payment_request(_user["uid"], _selected_plan)
-                    _req["plan"] = _selected_plan
-                    st.session_state.sepay_payment = _req
+        st.info("💡 **Dành cho:** Pro MMO, Agency, developer — đã có tài khoản Anthropic / Suno / fal.ai riêng.")
+        st.caption("Sau khi mua gói, vào **Cài đặt → API Keys** để nhập key của bạn. Hệ thống sẽ dùng key đó, không trừ Xu.")
+
+        st.divider()
+        if _BYOK_PAY and _BYOK_PAY.get("payment_code"):
+            _bstatus = check_payment_status(_BYOK_PAY["payment_code"])
+            if _bstatus == "pending":
+                _bq, _bi = st.columns([1, 1.6])
+                with _bq:
+                    if _BYOK_PAY.get("qr_url"):
+                        st.image(_BYOK_PAY["qr_url"], caption="Quét QR bằng app ngân hàng", width=220)
+                with _bi:
+                    st.markdown("### Chuyển khoản — **Gói Tự Túc**")
+                    st.markdown(f"**Số tiền:** `{fmt_vnd(_BYOK_PAY['amount_vnd'])} VNĐ`")
+                    st.markdown(f"**Ngân hàng:** `{_BYOK_PAY.get('account_name','')} — {_BYOK_PAY.get('account_no','')}`")
+                    st.markdown("**Nội dung CK (bắt buộc):**")
+                    st.code(_BYOK_PAY["payment_code"], language="text")
+                    _bexp = _BYOK_PAY.get("expires_at", "")
+                    if _bexp:
+                        try:
+                            _bexp_dt = datetime.fromisoformat(_bexp.replace("Z", "+00:00"))
+                            _bmins = max(0, int((_bexp_dt - datetime.now(timezone.utc)).total_seconds() // 60))
+                            st.caption(f"⏱️ Mã hết hạn sau: **{_bmins} phút**")
+                        except Exception:
+                            pass
+                    _bb1, _bb2 = st.columns(2)
+                    if _bb1.button("✅ Tôi đã chuyển khoản", type="primary", use_container_width=True, key="ckbyok"):
+                        _s = check_payment_status(_BYOK_PAY["payment_code"])
+                        if _s == "completed":
+                            st.rerun()
+                        elif _s == "pending":
+                            st.warning("Chưa nhận được. Chờ 10–30 giây rồi thử lại.")
+                        else:
+                            st.error(f"Trạng thái: {_s}.")
+                            st.session_state.pop("sepay_byok_payment", None)
+                    if _bb2.button("🔄 Tạo mã mới", use_container_width=True, key="renewbyok"):
+                        st.session_state.pop("sepay_byok_payment", None)
+                        st.rerun()
+            elif _bstatus == "expired":
+                st.warning("Mã đã hết hạn. Vui lòng tạo mã mới.")
+                st.session_state.pop("sepay_byok_payment", None)
+                if st.button("🔄 Tạo mã mới", type="primary", key="newbyok2"):
                     st.rerun()
-                except Exception as _e:
-                    st.error(f"Lỗi tạo thanh toán: {_e}")
+            elif _bstatus == "failed":
+                st.error("Giao dịch thất bại. Vui lòng liên hệ hỗ trợ.")
+                st.session_state.pop("sepay_byok_payment", None)
+        else:
+            if st.button(f"📱 Tạo QR — Gói Tự Túc ({fmt_vnd(_binfo['price_vnd'])}₫/tháng)",
+                         type="primary", use_container_width=True, key="qrbyok"):
+                with st.spinner("Đang tạo mã chuyển khoản…"):
+                    try:
+                        _breq = create_payment_request(_user["uid"], "Gói Tự Túc")
+                        _breq["plan"] = "Gói Tự Túc"
+                        st.session_state.sepay_byok_payment = _breq
+                        st.rerun()
+                    except Exception as _be:
+                        st.error(f"Lỗi tạo thanh toán: {_be}")
 
     st.divider()
     st.page_link("views/home.py", label="🏠 Về trang chủ")
     st.stop()
 
-st.success(f"✅ Xin chào **{_user['name']}** — Gói **{_user['plan']}** đang hoạt động")
+_is_byok      = _user.get("is_byok", False)
+_credits_left = _user.get("credits", 0)
+if _is_byok:
+    st.markdown(
+        f'✅ Xin chào **{_user["name"]}** — Gói **{_user["plan"]}** · '
+        f'<span style="color:#818cf8;font-weight:700;">🔑 Không giới hạn (BYOK)</span>',
+        unsafe_allow_html=True,
+    )
+else:
+    _coin_color = "#10b981" if _credits_left > 50 else ("#f59e0b" if _credits_left > 10 else "#ef4444")
+    st.markdown(
+        f'✅ Xin chào **{_user["name"]}** — Gói **{_user["plan"]}** · '
+        f'<span style="color:{_coin_color};font-weight:700;">🪙 {_credits_left} Xu còn lại</span>'
+        f'<span style="color:rgba(255,255,255,0.5);font-size:0.78rem;margin-left:8px;">'
+        f'(Script=1Xu · Ảnh=1Xu · Nhạc=5Xu)</span>',
+        unsafe_allow_html=True,
+    )
+    if _credits_left <= 10:
+        st.warning(f"⚠️ Chỉ còn **{_credits_left} Xu** — vào **Tài khoản → Hỗ trợ** để nạp thêm.")
 
 # ---------------------------------------------------------------------------
 # Session state defaults
@@ -514,31 +647,49 @@ def image_widget(prompt: str, img_key: str):
     )
 
     # ── Nút tạo ảnh ──────────────────────────────────────────────────────────
-    has_img  = img_key in st.session_state.images
-    btn_lbl  = "🔄 Tạo lại ảnh" if has_img else "🎨 Tạo ảnh"
-    if st.button(btn_lbl, key=f"btn_{img_key}", use_container_width=True):
-        if not fal_key:
-            st.warning("Nhập fal.ai API Key ở sidebar để tạo ảnh.")
-        else:
-            effective_prompt = prompt
-            if aspect_ratio == "1:1":
-                effective_prompt = (
-                    prompt.rstrip(". ") +
-                    ", no text, no typography, no letters, no words, no title, "
-                    "no caption, no banner, no watermark, no labels, no overlay text, "
-                    "pure visual image only"
-                )
-            with st.spinner(f"Nano Banana Pro đang tạo {num_images} ảnh {aspect_ratio} {resolution}..."):
-                try:
-                    st.session_state.images[img_key] = generate_image(
-                        effective_prompt, fal_key,
-                        aspect_ratio=aspect_ratio,
-                        resolution=resolution,
-                        num_images=int(num_images),
-                        output_format=out_fmt,
+    has_img     = img_key in st.session_state.images
+    _img_user   = st.session_state.get("user", {})
+    _img_byok   = _img_user.get("is_byok", False)
+    _img_coins  = _img_user.get("credits", 0)
+    _cd_img_key = f"_cd_img_{img_key}"
+    _cd_img_rem = int(10 - (time.time() - st.session_state.get(_cd_img_key, 0)))
+    _img_cost   = COIN_COSTS["image"]
+
+    if _cd_img_rem > 0:
+        st.button(f"⏳ Cooldown {_cd_img_rem}s…", disabled=True, key=f"btn_{img_key}", use_container_width=True)
+    elif not _img_byok and _img_coins < _img_cost:
+        st.button(f"🪙 Không đủ Xu (cần {_img_cost})", disabled=True, key=f"btn_{img_key}", use_container_width=True)
+    else:
+        btn_lbl = f"🔄 Tạo lại ảnh ({_img_cost} Xu)" if has_img else f"🎨 Tạo ảnh ({_img_cost} Xu)"
+        if st.button(btn_lbl, key=f"btn_{img_key}", use_container_width=True):
+            if not fal_key:
+                st.warning("Nhập fal.ai API Key ở sidebar để tạo ảnh.")
+            else:
+                st.session_state[_cd_img_key] = time.time()
+                effective_prompt = prompt
+                if aspect_ratio == "1:1":
+                    effective_prompt = (
+                        prompt.rstrip(". ") +
+                        ", no text, no typography, no letters, no words, no title, "
+                        "no caption, no banner, no watermark, no labels, no overlay text, "
+                        "pure visual image only"
                     )
-                except Exception as e:
-                    st.error(f"Lỗi tạo ảnh: {e}")
+                with st.spinner(f"Nano Banana Pro đang tạo {num_images} ảnh {aspect_ratio} {resolution}..."):
+                    try:
+                        st.session_state.images[img_key] = generate_image(
+                            effective_prompt, fal_key,
+                            aspect_ratio=aspect_ratio,
+                            resolution=resolution,
+                            num_images=int(num_images),
+                            output_format=out_fmt,
+                        )
+                        # Trừ 1 Xu sau khi tạo ảnh thành công (chỉ với bundled)
+                        _cu = st.session_state.get("user", {})
+                        if _cu.get("uid") and not _cu.get("is_byok"):
+                            _rem = _deduct_coins(_cu["uid"], _img_cost)
+                            st.session_state.user = {**_cu, "credits": _rem}
+                    except Exception as e:
+                        st.error(f"Lỗi tạo ảnh: {e}")
 
     # ── Hiển thị kết quả ─────────────────────────────────────────────────────
     if img_key in st.session_state.images:
@@ -833,6 +984,11 @@ def run_suno_generation(title: str, style: str, lyrics: str, track_key: str):
             bar_slot.empty()
             preview_slot.empty()
             dl_slot.empty()
+            # Trừ 5 Xu sau khi render nhạc thành công (chỉ với bundled)
+            _cu = st.session_state.get("user", {})
+            if _cu.get("uid") and not _cu.get("is_byok"):
+                _rem = _deduct_coins(_cu["uid"], COIN_COSTS["suno"])
+                st.session_state.user = {**_cu, "credits": _rem}
             st.rerun()
             return
 
@@ -986,23 +1142,21 @@ def _persist_suno_to_history():
 
 
 def generate_video_script(title: str, style: str, lyrics: str, track_key: str):
-    """Call Claude Haiku to write a YouTube video script, store in session_state."""
-    api_key = st.session_state.get("anthropic_api_key", "").strip()
-    if not api_key:
-        st.warning("Nhập Anthropic API Key ở sidebar để tạo script video.")
-        return
+    """Tạo script YouTube video bằng AI Router, lưu vào session_state."""
+    api_key  = st.session_state.get("anthropic_api_key", "").strip()
     meta     = st.session_state.get("music_meta", {})
     topic    = meta.get("topic", title)
     genre    = meta.get("music_genre", "Thiếu Nhi (Nursery)")
     language = st.session_state.get("language_select", "Tiếng Việt")
     prompt   = build_video_script_prompt(title, topic, genre, style, lyrics, language)
-    client   = anthropic.Anthropic(api_key=api_key)
-    msg      = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+    raw, _p  = generate_text(
+        system_prompt="",
+        user_prompt=prompt,
         max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
+        user_api_key=api_key,
+        claude_model="claude-haiku-4-5-20251001",
     )
-    st.session_state.video_scripts[track_key] = msg.content[0].text.strip()
+    st.session_state.video_scripts[track_key] = raw.strip()
 
 
 def _parse_storyboard_prompts(storyboard_md: str) -> str:
@@ -1057,12 +1211,8 @@ def _parse_storyboard_prompts(storyboard_md: str) -> str:
 
 
 def _gen_mv_storyboard(title: str, lyrics: str, track_key: str, tracks_data: list):
-    """Gọi Claude Sonnet để tạo Storyboard MV từ dữ liệu track Suno thực tế."""
+    """Tạo Storyboard MV bằng AI Router từ dữ liệu track Suno thực tế."""
     api_key = st.session_state.get("anthropic_api_key", "").strip()
-    if not api_key:
-        st.warning("Nhập Anthropic API Key ở sidebar để tạo Storyboard MV.")
-        return
-
     meta  = st.session_state.get("music_meta", {})
     topic = meta.get("topic", title)
     genre = meta.get("music_genre", "")
@@ -1073,13 +1223,13 @@ def _gen_mv_storyboard(title: str, lyrics: str, track_key: str, tracks_data: lis
 
     prompt = build_mv_director_prompt(topic, genre, dur, lyrics)
 
-    client = anthropic.Anthropic(api_key=api_key)
-    msg    = client.messages.create(
-        model="claude-sonnet-4-6",
+    raw, _p = generate_text(
+        system_prompt="",
+        user_prompt=prompt,
         max_tokens=6000,
-        messages=[{"role": "user", "content": prompt}],
+        user_api_key=api_key,
     )
-    st.session_state.mv_storyboards[track_key] = msg.content[0].text.strip()
+    st.session_state.mv_storyboards[track_key] = raw.strip()
 
 
 def music_widget(title: str, style: str, lyrics: str, track_key: str):
@@ -1113,16 +1263,30 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
                         key=f"dl_mp3_{track_key}_v{vi}",
                     )
 
-    if fail_msg:
-        btn_label = "🔄 Tạo lại"
-    elif tracks:
-        btn_label = "🔄 Tạo lại Suno"
-    else:
-        btn_label = "🎵 Tạo nhạc Suno"
+    _suno_user   = st.session_state.get("user", {})
+    _suno_byok   = _suno_user.get("is_byok", False)
+    _suno_coins  = _suno_user.get("credits", 0)
+    _cd_suno_key = f"_cd_suno_{track_key}"
+    _cd_suno_rem = int(10 - (time.time() - st.session_state.get(_cd_suno_key, 0)))
+    _suno_cost   = COIN_COSTS["suno"]
 
-    if st.button(btn_label, key=f"gen_suno_{track_key}"):
-        st.session_state.suno_failed.pop(track_key, None)
-        run_suno_generation(title, style, lyrics, track_key)
+    _cost_suffix = "" if _suno_byok else f" ({_suno_cost} Xu)"
+    if fail_msg:
+        btn_label = f"🔄 Tạo lại{_cost_suffix}"
+    elif tracks:
+        btn_label = f"🔄 Tạo lại Suno{_cost_suffix}"
+    else:
+        btn_label = f"🎵 Tạo nhạc Suno{_cost_suffix}"
+
+    if _cd_suno_rem > 0:
+        st.button(f"⏳ Cooldown {_cd_suno_rem}s…", disabled=True, key=f"gen_suno_{track_key}")
+    elif not _suno_byok and _suno_coins < _suno_cost:
+        st.button(f"🪙 Không đủ Xu (cần {_suno_cost}, có {_suno_coins})", disabled=True, key=f"gen_suno_{track_key}")
+    else:
+        if st.button(btn_label, key=f"gen_suno_{track_key}"):
+            st.session_state[_cd_suno_key] = time.time()
+            st.session_state.suno_failed.pop(track_key, None)
+            run_suno_generation(title, style, lyrics, track_key)
 
     # ── Video Script ───────────────────────────────────────────────────────
     script = st.session_state.video_scripts.get(track_key)
@@ -1248,25 +1412,23 @@ def _fix_control_chars(s: str) -> str:
 # Hot topic suggestions
 # ---------------------------------------------------------------------------
 def get_hot_topics(api_key: str, language: str) -> list:
-    client = anthropic.Anthropic(api_key=api_key)
     today = date.today().strftime("%B %d, %Y")
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+    raw, _p = generate_text(
+        system_prompt="",
+        user_prompt=(
+            f"You are a YouTube content strategist for a children's music channel.\n"
+            f"Today is {today}. Suggest 5 FRESH and DIFFERENT trending topic ideas for children's music videos.\n"
+            f"Output language: {language}\n"
+            f"Consider: current season, upcoming holidays, popular animals, vehicles, food, nature, fairy tales.\n"
+            f"Each topic must be specific and creative, not generic.\n"
+            f"Return ONLY a JSON array of 5 short topic strings (5-10 words each), no explanation.\n"
+            f'Example: ["Little duck in the rainy day", "Fire truck saves the forest", ...]'
+        ),
         max_tokens=512,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"You are a YouTube content strategist for a children's music channel.\n"
-                f"Today is {today}. Suggest 5 FRESH and DIFFERENT trending topic ideas for children's music videos.\n"
-                f"Output language: {language}\n"
-                f"Consider: current season, upcoming holidays, popular animals, vehicles, food, nature, fairy tales.\n"
-                f"Each topic must be specific and creative, not generic.\n"
-                f"Return ONLY a JSON array of 5 short topic strings (5-10 words each), no explanation.\n"
-                f'Example: ["Little duck in the rainy day", "Fire truck saves the forest", ...]'
-            ),
-        }],
+        user_api_key=api_key,
+        claude_model="claude-haiku-4-5-20251001",
     )
-    raw = message.content[0].text.strip()
+    raw = raw.strip()
     if "```json" in raw:
         raw = raw.split("```json")[1].split("```")[0].strip()
     elif "```" in raw:
@@ -1303,15 +1465,12 @@ with st.sidebar:
 
     suggest_btn = st.button("💡 Gợi ý 5 chủ đề hot", use_container_width=True)
     if suggest_btn:
-        if not api_key:
-            st.warning("Nhập Anthropic API Key để dùng tính năng gợi ý.")
-        else:
-            with st.spinner("Đang tìm chủ đề hot hôm nay..."):
-                try:
-                    lang = st.session_state.get("language_select", "English")
-                    st.session_state.suggested_topics = get_hot_topics(api_key, lang)
-                except Exception as e:
-                    st.error(f"Lỗi gợi ý: {e}")
+        with st.spinner("Đang tìm chủ đề hot hôm nay..."):
+            try:
+                lang = st.session_state.get("language_select", "English")
+                st.session_state.suggested_topics = get_hot_topics(api_key, lang)
+            except Exception as e:
+                st.error(f"Lỗi gợi ý: {e}")
 
     if st.session_state.suggested_topics:
         st.markdown("**Chọn để điền vào ô chủ đề:**")
@@ -1490,19 +1649,20 @@ def parse_json(raw: str) -> dict:
 # Claude API calls
 # ---------------------------------------------------------------------------
 def call_claude_single(api_key: str, topic: str, language: str, create_mv: bool,
-                       genre: str = "Thiếu Nhi (Nursery)", bpm: str = "", style_tags: str = "") -> dict:
-    client = anthropic.Anthropic(api_key=api_key)
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
+                       genre: str = "Thiếu Nhi (Nursery)", bpm: str = "", style_tags: str = "",
+                       byok_mode: bool = False) -> dict:
+    raw, _p = generate_text(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=build_single_prompt(topic, language, create_mv, genre, bpm, style_tags),
         max_tokens=16000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": build_single_prompt(topic, language, create_mv, genre, bpm, style_tags)}],
+        user_api_key=api_key,
+        byok_mode=byok_mode,
     )
-    return parse_json(msg.content[0].text)
+    return parse_json(raw)
 
 def call_claude_album(api_key, topic, num_tracks, language, create_mv, status_ctx,
-                      genre: str = "Thiếu Nhi (Nursery)", bpm: str = "", style_tags: str = "") -> dict:
-    client = anthropic.Anthropic(api_key=api_key)
+                      genre: str = "Thiếu Nhi (Nursery)", bpm: str = "", style_tags: str = "",
+                      byok_mode: bool = False) -> dict:
     batches = compute_batches(num_tracks)
     all_results, album_title = [], None
 
@@ -1513,19 +1673,20 @@ def call_claude_album(api_key, topic, num_tracks, language, create_mv, status_ct
             if i == 0
             else build_album_continuation_prompt(topic, album_title, num_tracks, start, end, language, genre, bpm, style_tags)
         )
-        msg = client.messages.create(
-            model="claude-sonnet-4-6",
+        raw, _provider = generate_text(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=prompt,
             max_tokens=16000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
+            user_api_key=api_key,
+            byok_mode=byok_mode,
         )
-        batch_data = parse_json(msg.content[0].text)
+        batch_data = parse_json(raw)
         all_results.append(batch_data)
         if i == 0:
             album_title = batch_data.get("title", topic)
-            status_ctx.write(f"✅ Phần 1 xong — Album: **{album_title}**")
+            status_ctx.write(f"✅ Phần 1 xong — Album: **{album_title}** _(via {provider_label(_provider)})_")
         else:
-            status_ctx.write(f"✅ Phần {i+1} xong")
+            status_ctx.write(f"✅ Phần {i+1} xong _(via {provider_label(_provider)})_")
 
     merged = all_results[0].copy()
     all_tracks = list(merged.get("tracks", []))
@@ -1930,8 +2091,9 @@ with tab_music:
 # Main logic
 # ---------------------------------------------------------------------------
 if generate_btn:
-    if not api_key:
-        st.error("Vui lòng nhập Anthropic API Key ở sidebar.")
+    _gen_is_byok = _user.get("is_byok", False)
+    if _gen_is_byok and not api_key:
+        st.error("Gói Tự Túc (BYOK) yêu cầu Anthropic API Key của bạn. Vào **Cài đặt → API Keys** để nhập.")
     elif not topic:
         st.warning("Vui lòng nhập chủ đề bài hát / album.")
     else:
@@ -1940,26 +2102,27 @@ if generate_btn:
         g_bpm, g_tags = gcfg["bpm"], gcfg["style_tags"]
         try:
             if len(batches) == 1:
-                with st.spinner("Claude đang sản xuất…"):
+                with st.spinner("AI đang sản xuất…"):
                     if num_tracks == 1:
-                        result = call_claude_single(api_key, topic, language, create_mv, music_genre, g_bpm, g_tags)
+                        result = call_claude_single(api_key, topic, language, create_mv, music_genre, g_bpm, g_tags, byok_mode=_gen_is_byok)
                     else:
-                        client = anthropic.Anthropic(api_key=api_key)
-                        prompt = build_album_first_batch_prompt(
+                        _prompt = build_album_first_batch_prompt(
                             topic, num_tracks, 1, num_tracks, language, create_mv, music_genre, g_bpm, g_tags
                         )
-                        msg = client.messages.create(
-                            model="claude-sonnet-4-6", max_tokens=16000,
-                            system=SYSTEM_PROMPT,
-                            messages=[{"role": "user", "content": prompt}],
+                        _raw, _p = generate_text(
+                            system_prompt=SYSTEM_PROMPT,
+                            user_prompt=_prompt,
+                            max_tokens=16000,
+                            user_api_key=api_key,
+                            byok_mode=_gen_is_byok,
                         )
-                        result = parse_json(msg.content[0].text)
+                        result = parse_json(_raw)
             else:
                 with st.status(
                     f"Đang sản xuất {num_tracks} bài ({len(batches)} phần)…",
                     expanded=True,
                 ) as status:
-                    result = call_claude_album(api_key, topic, num_tracks, language, create_mv, status, music_genre, g_bpm, g_tags)
+                    result = call_claude_album(api_key, topic, num_tracks, language, create_mv, status, music_genre, g_bpm, g_tags, byok_mode=_gen_is_byok)
                     status.update(
                         label=f"✅ Hoàn thành {num_tracks} bài — {len(batches)} phần",
                         state="complete",
@@ -1978,6 +2141,13 @@ if generate_btn:
                         topic, music_genre, num_tracks, result, create_mv,
                     )
                     st.session_state.current_history_id = _hist_id
+                except Exception:
+                    pass
+                # Trừ 1 Xu (script) sau khi tạo thành công (chỉ với bundled)
+                try:
+                    if not st.session_state.user.get("is_byok"):
+                        _remaining = _deduct_coins(st.session_state.user["uid"], COIN_COSTS["script"])
+                        st.session_state.user = {**st.session_state.user, "credits": _remaining}
                 except Exception:
                     pass
             # Reset images & audio khi tạo plan mới
@@ -2017,35 +2187,27 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
 
     if st.button("🔍 Tra cứu Trending Keywords", use_container_width=True, key="kw_search_btn"):
         _kw_api = st.session_state.get("anthropic_api_key", "").strip()
-        if not _kw_api:
-            st.warning("Nhập Anthropic API Key ở sidebar để dùng tính năng này.")
-        else:
-            with st.spinner("Claude đang phân tích trending keywords…"):
-                try:
-                    _kw_prompt = build_keyword_prompt(
-                        kw_genre, kw_lang, kw_niche, date.today().strftime("%B %d, %Y")
+        with st.spinner("AI đang phân tích trending keywords…"):
+            try:
+                _kw_prompt = build_keyword_prompt(
+                    kw_genre, kw_lang, kw_niche, date.today().strftime("%B %d, %Y")
+                )
+                _kw_raw, _kw_p = generate_text(
+                    system_prompt="",
+                    user_prompt=_kw_prompt,
+                    max_tokens=1024,
+                    user_api_key=_kw_api,
+                    claude_model="claude-haiku-4-5-20251001",
+                )
+                _kw_raw = _kw_raw.strip()
+                if not _kw_raw:
+                    st.error("AI trả về phản hồi rỗng. Thử lại.")
+                else:
+                    st.session_state.keyword_result = json.loads(
+                        _fix_control_chars(_kw_raw)
                     )
-                    _kw_client = anthropic.Anthropic(api_key=_kw_api)
-                    _kw_msg = _kw_client.messages.create(
-                        model="claude-haiku-4-5-20251001",
-                        max_tokens=1024,
-                        messages=[{"role": "user", "content": _kw_prompt}],
-                    )
-                    _kw_raw = _kw_msg.content[0].text.strip()
-                    # strip markdown code fences if Haiku wraps in ```json ... ```
-                    if _kw_raw.startswith("```"):
-                        _kw_raw = _kw_raw.split("```", 2)[1]
-                        if _kw_raw.startswith("json"):
-                            _kw_raw = _kw_raw[4:]
-                        _kw_raw = _kw_raw.strip()
-                    if not _kw_raw:
-                        st.error("Claude trả về phản hồi rỗng. Thử lại.")
-                    else:
-                        st.session_state.keyword_result = json.loads(
-                            _fix_control_chars(_kw_raw)
-                        )
-                except Exception as _kw_e:
-                    st.error(f"Lỗi tra cứu: {_kw_e}")
+            except Exception as _kw_e:
+                st.error(f"Lỗi tra cứu: {_kw_e}")
 
     kw = st.session_state.keyword_result
     if kw:
@@ -2072,32 +2234,27 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
                 if st.session_state.get(f"kw_chk_{i}", False)
             ]
             _topic_api = st.session_state.get("anthropic_api_key", "").strip()
-            _suggest_disabled = not _selected_kws or not _topic_api
+            _suggest_disabled = not _selected_kws
             _suggest_label = (
                 f"💡 Gợi ý 5 chủ đề hot từ {len(_selected_kws)} từ khóa đã chọn"
                 if _selected_kws else "💡 Gợi ý 5 chủ đề hot (chọn ít nhất 1 từ khóa)"
             )
             if st.button(_suggest_label, key="kw_suggest_btn",
                          use_container_width=True, disabled=_suggest_disabled):
-                with st.spinner("Claude đang phân tích chủ đề tiềm năng…"):
+                with st.spinner("AI đang phân tích chủ đề tiềm năng…"):
                     try:
                         _tp_prompt = build_topic_suggestion_prompt(
                             _selected_kws, kw_genre, kw_lang
                         )
-                        _tp_client = anthropic.Anthropic(api_key=_topic_api)
-                        _tp_msg = _tp_client.messages.create(
-                            model="claude-haiku-4-5-20251001",
+                        _tp_raw, _tp_p = generate_text(
+                            system_prompt="",
+                            user_prompt=_tp_prompt,
                             max_tokens=1024,
-                            messages=[{"role": "user", "content": _tp_prompt}],
+                            user_api_key=_topic_api,
+                            claude_model="claude-haiku-4-5-20251001",
                         )
-                        _tp_raw = _tp_msg.content[0].text.strip()
-                        if _tp_raw.startswith("```"):
-                            _tp_raw = _tp_raw.split("```", 2)[1]
-                            if _tp_raw.startswith("json"):
-                                _tp_raw = _tp_raw[4:]
-                            _tp_raw = _tp_raw.strip()
+                        _tp_raw = _tp_raw.strip()
                         _topics = json.loads(_fix_control_chars(_tp_raw))
-                        # đảm bảo sort đúng score giảm dần
                         _topics.sort(key=lambda x: x.get("score", 0), reverse=True)
                         st.session_state.kw_topic_results = _topics
                     except Exception as _tp_e:

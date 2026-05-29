@@ -22,8 +22,8 @@ công bằng và minh bạch** để bạn yên tâm khi đăng ký dịch vụ.
 | Tình huống | Điều kiện | Mức hoàn trả |
 |-----------|-----------|-------------|
 | **Lỗi kỹ thuật nghiêm trọng** | Nền tảng không hoạt động liên tục trên 24 giờ | **100%** |
-| **Thanh toán trùng lặp** | Bị charge 2 lần cho cùng một gói | **100%** |
-| **Gói không được kích hoạt** | Đã thanh toán thành công nhưng không truy cập được sau 1 giờ | **100%** |
+| **Chuyển khoản nhầm / trùng lặp** | Bị trừ tiền 2 lần hoặc chuyển sai mã thanh toán | **100%** |
+| **Gói không được kích hoạt** | Đã chuyển khoản thành công nhưng tài khoản không mở khóa sau 1 giờ | **100%** |
 | **Yêu cầu trong 24 giờ đầu** | Chưa sử dụng bất kỳ tính năng nào (chưa tạo nhạc, ảnh) | **100%** |
 | **Lỗi một phần** | Một số tính năng không hoạt động, còn tính năng khác hoạt động bình thường | **Một phần** (theo thỏa thuận) |
 
@@ -34,66 +34,68 @@ công bằng và minh bạch** để bạn yên tâm khi đăng ký dịch vụ.
 - **Đã sử dụng dịch vụ** — đã tạo nhạc, ảnh thumbnail, script video, hoặc bất kỳ nội dung nào
 - **Hết hạn tự nhiên** — gói Ngày/Tuần/Tháng/Năm hết thời hạn đăng ký
 - **Đổi ý** — thay đổi quyết định sau khi đã sử dụng dịch vụ
-- **Lỗi API bên thứ ba** — Suno, Anthropic Claude, Google, fal.ai là các dịch vụ độc lập; SonicFlow AI không kiểm soát tính khả dụng của họ
-- **Chi phí API** — phí Anthropic, Suno, Google bạn tự trả cho nhà cung cấp không thuộc phạm vi hoàn tiền của chúng tôi
+- **Lỗi API bên thứ ba** — Suno, Anthropic Claude, Google, fal.ai là dịch vụ độc lập; SonicFlow AI không kiểm soát tính khả dụng của họ
+- **Chi phí API** — phí bạn tự trả cho Anthropic, Suno, Google không thuộc phạm vi hoàn tiền
 - **Tài khoản bị tạm ngừng** do vi phạm [Điều Khoản Sử Dụng](https://sonicflowai.click/terms)
 
 ---
 
 ## 📋 Quy Trình Yêu Cầu Hoàn Tiền
 
-**Bước 1 — Liên hệ trong vòng 72 giờ**
+Toàn bộ quy trình được xử lý **trực tiếp trong ứng dụng** — không cần email hay liên hệ ngoài.
 
-Gửi yêu cầu trong vòng **72 giờ** kể từ thời điểm thanh toán.
+### Bước 1 — Gửi yêu cầu qua form trong app
 
-**Bước 2 — Cung cấp thông tin**
+1. Đăng nhập vào tài khoản SonicFlow AI
+2. Vào **Tài khoản** → Tab **🎧 Hỗ trợ**
+3. Bấm **Gửi yêu cầu hỗ trợ mới**
+4. Chọn loại yêu cầu: **"Yêu cầu Hoàn tiền (Lỗi giao dịch)"**
+5. Chọn giao dịch liên quan trong danh sách, mô tả chi tiết vấn đề
+6. Nhập **đầy đủ thông tin ngân hàng** để nhận tiền:
+   `Ngân hàng — Số tài khoản — Tên chủ thẻ`
+7. Bấm **🚀 Gửi yêu cầu**
 
-- Email tài khoản Google đã đăng ký
-- Mã giao dịch PayPal (Transaction ID)
-- Mô tả chi tiết vấn đề gặp phải
-- Screenshot hoặc bằng chứng lỗi (nếu có)
+> ⏰ Gửi yêu cầu trong vòng **72 giờ** kể từ thời điểm thanh toán.
 
-**Bước 3 — Xử lý**
+### Bước 2 — Admin xét duyệt & chuyển khoản
 
 - Chúng tôi phản hồi trong vòng **24 giờ làm việc**
-- Nếu đủ điều kiện, hoàn tiền thực hiện trong **3–5 ngày làm việc** qua PayPal
-- Tiền hoàn vào đúng tài khoản PayPal bạn đã dùng để thanh toán
+- Nếu yêu cầu hợp lệ, Admin chuyển khoản trực tiếp vào tài khoản ngân hàng bạn đã cung cấp
+- Hoàn tiền thực hiện qua **chuyển khoản ngân hàng nội địa** (MB Bank / VCB), thường trong **1 ngày làm việc**
 
----
+### Bước 3 — Cập nhật trạng thái trong app
 
-## 💬 Cách Liên Hệ Yêu Cầu Hoàn Tiền
-
-**Cách 1 — PayPal Resolution Center (Khuyên dùng)**
-
-1. Đăng nhập vào tài khoản PayPal của bạn
-2. Vào **Activity** → tìm giao dịch thanh toán cho SonicFlow AI
-3. Chọn **"Report a problem"** → **"I want a refund"**
-4. Mô tả lý do và gửi yêu cầu
-
-**Cách 2 — Liên hệ trực tiếp**
-
-Nhắn tin trực tiếp đến tài khoản PayPal mà bạn đã chuyển tiền, kèm theo
-email đăng ký và mô tả vấn đề.
+- Ticket chuyển sang trạng thái **✅ Đã Giải Quyết**
+- Gói cước của bạn bị thu hồi ngay lập tức
+- Bạn có thể xem lại toàn bộ lịch sử trong Tab **🎧 Hỗ trợ**
 
 ---
 
 ## ❓ Câu Hỏi Thường Gặp
 
+**Tôi không thấy Tab Hỗ trợ ở đâu?**
+
+Đăng nhập → Bấm vào tên hoặc avatar của bạn → Trang **Tài khoản của tôi** → Chọn tab **🎧 Hỗ trợ**.
+
+**Tôi chưa đăng nhập, làm sao liên hệ?**
+
+Nếu không thể đăng nhập, hãy nhắn vào nhóm Telegram hỗ trợ (link ở góc phải trang chủ) kèm mã giao dịch và email đăng ký.
+
 **Tôi có thể yêu cầu hoàn tiền nhiều lần không?**
 
-Mỗi tài khoản chỉ được hoàn tiền tối đa **1 lần**. Hoàn tiền nhiều lần sẽ bị từ chối.
+Mỗi tài khoản chỉ được hoàn tiền tối đa **1 lần**. Các yêu cầu tiếp theo sẽ bị từ chối.
 
-**Tôi quên yêu cầu trong 72 giờ, có được không?**
+**Quá 72 giờ mới phát hiện lỗi, có được không?**
 
-Chúng tôi xem xét từng trường hợp cụ thể. Tuy nhiên sau 72 giờ, đặc biệt nếu đã sử dụng dịch vụ, việc hoàn tiền sẽ khó được chấp thuận.
+Chúng tôi xem xét từng trường hợp cụ thể. Sau 72 giờ, đặc biệt nếu đã sử dụng dịch vụ, khả năng chấp thuận sẽ thấp hơn.
 
-**Gói Năm ($99.99) có hoàn tiền theo tỷ lệ không?**
+**Gói Năm (1.490.000₫) có hoàn tiền theo tỷ lệ không?**
 
-Không. Các gói thanh toán theo thời hạn cố định không hoàn tiền theo tỷ lệ ngày còn lại.
+Không. Các gói thanh toán theo thời hạn cố định không áp dụng hoàn tiền theo tỷ lệ ngày còn lại.
 
 **Suno API lỗi, tôi không tạo được nhạc — có hoàn tiền không?**
 
-Suno là dịch vụ độc lập. Nếu **toàn bộ tính năng** (bao gồm Claude AI tạo lyrics, tạo ảnh) vẫn hoạt động, chúng tôi không hoàn tiền vì lý do Suno lỗi riêng lẻ. Tuy nhiên nếu lỗi kéo dài và ảnh hưởng nghiêm trọng, hãy liên hệ để được xem xét.
+Suno là dịch vụ độc lập. Nếu **toàn bộ tính năng** (Claude AI tạo lyrics, tạo ảnh) vẫn hoạt động, chúng tôi không hoàn tiền vì lý do Suno lỗi riêng lẻ. Nếu lỗi kéo dài và ảnh hưởng nghiêm trọng, hãy gửi ticket để được xem xét.
 
 ---
 
@@ -101,6 +103,16 @@ Suno là dịch vụ độc lập. Nếu **toàn bộ tính năng** (bao gồm C
 > trực tiếp cho các nhà cung cấp tương ứng. SonicFlow AI không thu và không chịu trách nhiệm
 > hoàn lại các khoản chi phí API này.
 """)
+
+    # CTA box
+    user = st.session_state.get("user")
+    st.divider()
+    if user:
+        st.info("Bạn đang đăng nhập. Gửi yêu cầu hoàn tiền trực tiếp từ trang Tài khoản.")
+        st.page_link("views/user_dashboard.py", label="🎧 Đến Tab Hỗ trợ →", use_container_width=False)
+    else:
+        st.info("Đăng nhập để gửi yêu cầu hoàn tiền nhanh chóng ngay trong ứng dụng.")
+        st.page_link("views/app_music.py", label="🔵 Đăng nhập", use_container_width=False)
 
     st.divider()
     c1, c2, c3, c4 = st.columns(4)

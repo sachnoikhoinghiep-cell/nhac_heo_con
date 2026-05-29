@@ -6,6 +6,9 @@ from auth import (
     update_history_item,
     sign_out,
     PLAN_DURATION,
+    create_support_ticket,
+    get_user_tickets,
+    get_user_completed_payments,
 )
 from views._nav import render as _nav
 
@@ -26,6 +29,11 @@ uid = user["uid"]
 def _fmt_dt(dt) -> str:
     if not dt:
         return "Không xác định"
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            return dt
     if hasattr(dt, "tzinfo") and dt.tzinfo:
         dt = dt.astimezone(timezone.utc)
     return dt.strftime("%d/%m/%Y %H:%M")
@@ -38,8 +46,16 @@ def _days_left(expires_at) -> int | None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return max(0, (expires_at - now).days)
 
-_PLAN_ICONS = {"Ngày": "☀️", "Tuần": "📅", "Tháng": "🗓️", "Năm": "⭐"}
-_PLAN_COLORS = {"Ngày": "#3b82f6", "Tuần": "#8b5cf6", "Tháng": "#f59e0b", "Năm": "#10b981"}
+_PLAN_ICONS = {
+    "Trải Nghiệm": "🎯", "Content Creator": "🚀", "Agency / VIP": "👑",
+    # Gói cũ (tương thích ngược)
+    "Ngày": "☀️", "Tuần": "📅", "Tháng": "🗓️", "Năm": "⭐",
+}
+_PLAN_COLORS = {
+    "Trải Nghiệm": "#3b82f6", "Content Creator": "#f59e0b", "Agency / VIP": "#10b981",
+    # Gói cũ
+    "Ngày": "#3b82f6", "Tuần": "#8b5cf6", "Tháng": "#f59e0b", "Năm": "#10b981",
+}
 _GENRE_ICONS = {
     "Pop":        "🎤", "Rock":       "🎸", "Hip Hop":    "🎧",
     "R&B/Soul":   "🎶", "Electronic": "🎛️", "Jazz":       "🎺",
@@ -141,7 +157,7 @@ def _delete_dialog(item: dict):
 # ── Page ──────────────────────────────────────────────────────────────────────
 st.title("👤 Tài khoản của tôi")
 
-tab_plan, tab_projects = st.tabs(["📦 Gói dịch vụ", "🎵 Projects của tôi"])
+tab_plan, tab_projects, tab_support = st.tabs(["📦 Gói dịch vụ", "🎵 Projects của tôi", "🎧 Hỗ trợ"])
 
 # ─── Tab 1: Plan ──────────────────────────────────────────────────────────────
 with tab_plan:
@@ -200,10 +216,20 @@ with tab_plan:
             expires_at = _from_iso(_sub.get("expires_at"))
             days       = _days_left(expires_at)
 
-            col_m1, col_m2, col_m3 = st.columns(3)
+            credits  = _sub.get("credits", 0)
+            is_byok  = (user.get("plan") or "").lower().startswith("gói tự túc") or _sub.get("service_type") == "byok"
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             col_m1.metric("Gói hiện tại", plan)
-            col_m2.metric("Ngày kích hoạt", _fmt_dt(paid_at).split(" ")[0] if paid_at else "—")
-            col_m3.metric("Hết hạn", _fmt_dt(expires_at).split(" ")[0] if expires_at else "—")
+            col_m2.metric("🪙 Xu / Giới hạn", "∞ Unlimited" if is_byok else credits)
+            col_m3.metric("Ngày kích hoạt", _fmt_dt(paid_at).split(" ")[0] if paid_at else "—")
+            col_m4.metric("Hết hạn", _fmt_dt(expires_at).split(" ")[0] if expires_at else "—")
+
+            if is_byok:
+                st.info("🔑 Gói Tự Túc (BYOK) — Không giới hạn số lần tạo. Vào **API Keys** để quản lý key của bạn.")
+            else:
+                st.caption("Script = 1 Xu · Ảnh = 1 Xu · Nhạc Suno = 5 Xu · 1 MV hoàn chỉnh ≈ 7 Xu")
+                if credits <= 10:
+                    st.warning(f"⚠️ Chỉ còn **{credits} Xu** (~{credits // 7} MV) — nạp thêm để tránh gián đoạn!")
 
             # Progress bar
             if paid_at and expires_at:
@@ -310,3 +336,113 @@ with tab_projects:
                             _rename_dialog(item)
                         if b3.button("🗑️", key=f"del_{item['id']}", help="Xóa"):
                             _delete_dialog(item)
+
+
+# ─── Tab 3: Hỗ trợ ───────────────────────────────────────────────────────────
+with tab_support:
+    st.subheader("🎧 Hỗ trợ & Yêu cầu Hoàn tiền")
+    st.write("Gặp sự cố với giao dịch hoặc hệ thống? Gửi yêu cầu để Admin xử lý.")
+
+    _ISSUE_TYPES = [
+        "Yêu cầu Hoàn tiền (Lỗi giao dịch)",
+        "Lỗi tạo nhạc / hình ảnh",
+        "Lỗi gói cước / không mở khóa",
+        "Khác",
+    ]
+
+    # ── Form gửi yêu cầu mới ──────────────────────────────────────────────────
+    with st.expander("📝 Gửi yêu cầu hỗ trợ mới", expanded=True):
+        # Tải giao dịch gần đây để khách chọn
+        recent_payments = get_user_completed_payments(uid)
+        payment_opts: dict = {"Không liên quan đến giao dịch cụ thể": ""}
+        for p in recent_payments:
+            sub_plan = (p.get("subscription_plans") or {}).get("name", "")
+            label = f"{p['payment_code']}  ·  {p['amount_vnd']:,.0f}₫  ({sub_plan})  —  {_fmt_dt(p['created_at'])[:10]}"
+            payment_opts[label] = p["id"]
+
+        with st.form("support_ticket_form", clear_on_submit=True):
+            issue_type = st.selectbox("Loại yêu cầu:", _ISSUE_TYPES)
+
+            selected_label = st.selectbox(
+                "Giao dịch liên quan (tùy chọn):",
+                list(payment_opts.keys()),
+            )
+            selected_payment_id = payment_opts[selected_label]
+
+            description = st.text_area(
+                "Chi tiết vấn đề:",
+                placeholder="Ví dụ: Tôi đã chuyển khoản nhưng tài khoản chưa được kích hoạt…",
+                height=120,
+            )
+
+            bank_details = ""
+            if "Hoàn tiền" in issue_type:
+                st.info("💡 Cung cấp chính xác số tài khoản để Admin đối soát và hoàn tiền.")
+                bank_details = st.text_input(
+                    "Thông tin nhận hoàn tiền (Ngân hàng — STK — Tên chủ thẻ):",
+                    placeholder="VD: MB Bank — 0123456789 — NGUYEN VAN A",
+                )
+
+            submitted = st.form_submit_button("🚀 Gửi yêu cầu", type="primary")
+            if submitted:
+                if not description.strip():
+                    st.error("Vui lòng nhập chi tiết vấn đề.")
+                elif "Hoàn tiền" in issue_type and not bank_details.strip():
+                    st.error("Vui lòng nhập thông tin ngân hàng để nhận hoàn tiền.")
+                else:
+                    result = create_support_ticket(
+                        uid,
+                        issue_type,
+                        description.strip(),
+                        bank_details.strip(),
+                        selected_payment_id,
+                    )
+                    if result:
+                        st.success("✅ Đã gửi yêu cầu! Admin sẽ xử lý và cập nhật trạng thái sớm nhất.")
+                        st.session_state.pop("user_tickets", None)
+                        st.rerun()
+                    else:
+                        st.error("Có lỗi xảy ra, vui lòng thử lại.")
+
+    st.divider()
+
+    # ── Lịch sử tickets đã gửi ────────────────────────────────────────────────
+    st.write("**📋 Yêu cầu đã gửi**")
+
+    if st.button("🔄 Làm mới", key="refresh_tickets"):
+        st.session_state.pop("user_tickets", None)
+        st.rerun()
+
+    if "user_tickets" not in st.session_state:
+        st.session_state["user_tickets"] = get_user_tickets(uid)
+
+    tickets: list = st.session_state["user_tickets"]
+
+    if not tickets:
+        st.info("Bạn chưa gửi yêu cầu hỗ trợ nào.")
+    else:
+        _STATUS_BADGE = {
+            "pending":  '<span style="background:#78350f;color:#fcd34d;padding:2px 8px;border-radius:9999px;font-size:0.75rem;">⏳ Đang chờ</span>',
+            "resolved": '<span style="background:#14532d;color:#86efac;padding:2px 8px;border-radius:9999px;font-size:0.75rem;">✅ Đã xử lý</span>',
+            "rejected": '<span style="background:#7f1d1d;color:#fca5a5;padding:2px 8px;border-radius:9999px;font-size:0.75rem;">❌ Từ chối</span>',
+        }
+
+        for t in tickets:
+            status      = t.get("status", "pending")
+            issue       = t.get("issue_type", "—")
+            created     = _fmt_dt(t.get("created_at"))
+            badge_html  = _STATUS_BADGE.get(status, "")
+            pay_info    = t.get("payment_requests")
+            pay_label   = ""
+            if pay_info:
+                pay_label = f"  ·  Mã GD: `{pay_info.get('payment_code', '')}`"
+
+            with st.expander(f"{issue}  ·  {created}"):
+                st.markdown(badge_html, unsafe_allow_html=True)
+                st.write(f"**Nội dung:** {t.get('description', '')}")
+                if pay_label:
+                    st.caption(pay_label)
+                if t.get("bank_details"):
+                    st.code(f"Thông tin bank: {t['bank_details']}", language="text")
+                if status in ("resolved", "rejected") and t.get("admin_note"):
+                    st.info(f"**Phản hồi từ Admin:** {t['admin_note']}")

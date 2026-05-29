@@ -11,6 +11,10 @@ from auth import (
     admin_get_user_history,
     admin_delete_history_item,
     admin_update_history_item,
+    admin_get_payments,
+    admin_process_refund,
+    admin_get_tickets,
+    admin_resolve_ticket,
     PLAN_DURATION,
 )
 from views._nav import render as _nav
@@ -24,15 +28,26 @@ if not user or not st.session_state.get("is_admin"):
     st.stop()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-_PLANS = ["Ngày", "Tuần", "Tháng", "Năm"]
-_PLAN_COLORS = {"Ngày": "#3b82f6", "Tuần": "#8b5cf6", "Tháng": "#f59e0b", "Năm": "#10b981"}
+_PLANS = ["Trải Nghiệm", "Content Creator", "Agency / VIP"]
+_PLAN_COLORS = {
+    "Trải Nghiệm": "#3b82f6", "Content Creator": "#f59e0b", "Agency / VIP": "#10b981",
+    # Gói cũ (tương thích ngược)
+    "Ngày": "#3b82f6", "Tuần": "#8b5cf6", "Tháng": "#f59e0b", "Năm": "#10b981",
+}
+
 
 def _fmt_dt(dt) -> str:
     if not dt:
         return "—"
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            return dt
     if hasattr(dt, "tzinfo") and dt.tzinfo:
         dt = dt.astimezone(timezone.utc)
     return dt.strftime("%d/%m/%Y %H:%M")
+
 
 def _days_left(expires_at) -> int | None:
     if not expires_at:
@@ -43,11 +58,13 @@ def _days_left(expires_at) -> int | None:
     delta = expires_at - now
     return max(0, delta.days)
 
+
 def _plan_badge(plan, is_paid) -> str:
     if not plan or not is_paid:
         return '<span style="background:#374151;color:#9ca3af;padding:2px 8px;border-radius:9999px;font-size:0.75rem;">Free</span>'
     color = _PLAN_COLORS.get(plan, "#6b7280")
     return f'<span style="background:{color};color:#fff;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;">{plan}</span>'
+
 
 def _status_badge(is_paid, expires_at) -> str:
     if not is_paid:
@@ -76,15 +93,18 @@ def _edit_dialog(u: dict):
 
     st.divider()
     st.write("**Gói dịch vụ**")
-    plan_opts = ["Giữ nguyên", "Cấp gói mới", "Gia hạn (ngày)", "Thu hồi gói"]
+    plan_opts = ["Giữ nguyên", "Cấp gói mới", "Gia hạn (ngày)", "Cộng thêm lượt", "Thu hồi gói"]
     plan_action = st.radio("Thao tác", plan_opts, horizontal=True)
 
     new_plan = None
     extra_days = 0
+    extra_credits = 0
     if plan_action == "Cấp gói mới":
         new_plan = st.selectbox("Chọn gói", _PLANS)
     elif plan_action == "Gia hạn (ngày)":
         extra_days = st.number_input("Số ngày gia hạn", min_value=1, max_value=3650, value=30)
+    elif plan_action == "Cộng thêm lượt":
+        extra_credits = st.number_input("Số lượt cộng thêm", min_value=1, max_value=9999, value=30)
 
     st.divider()
     col1, col2 = st.columns(2)
@@ -100,6 +120,9 @@ def _edit_dialog(u: dict):
             admin_set_plan(uid, new_plan)
         elif plan_action == "Gia hạn (ngày)" and extra_days:
             admin_extend_plan(uid, int(extra_days))
+        elif plan_action == "Cộng thêm lượt" and extra_credits:
+            from auth import add_credits_topup as _act
+            _act(uid, int(extra_credits))
         elif plan_action == "Thu hồi gói":
             admin_remove_plan(uid)
         st.success("Đã lưu!")
@@ -129,7 +152,6 @@ def _history_dialog(uid: str, email: str):
             c2.write(f"**Số bài:** {tracks}")
             c3.write(f"**MV:** {'Có' if item.get('create_mv') else 'Không'}")
 
-            # Edit project name
             new_pname = st.text_input(
                 "Đổi tên project", value=name, key=f"adm_pname_{item['id']}"
             )
@@ -164,6 +186,8 @@ st.title("⚙️ Quản trị hệ thống")
 # ── Load users ────────────────────────────────────────────────────────────────
 if "admin_users" not in st.session_state or st.session_state.pop("_admin_refresh", False):
     st.session_state["admin_users"] = get_all_users()
+    st.session_state.pop("admin_payments_completed", None)
+    st.session_state.pop("admin_payments_refunded", None)
 
 all_users: list = st.session_state["admin_users"]
 now = datetime.now(timezone.utc)
@@ -186,74 +210,277 @@ m5.metric("Admin", admins)
 
 st.divider()
 
-# ── Filters ───────────────────────────────────────────────────────────────────
-fc1, fc2, fc3 = st.columns([3, 1.5, 1])
-search    = fc1.text_input("🔍 Tìm email / tên", placeholder="Nhập để lọc…", label_visibility="collapsed")
-plan_filt = fc2.selectbox("Lọc gói", ["Tất cả", "Đang hoạt động", "Free/Hết hạn"] + _PLANS, label_visibility="collapsed")
-if fc3.button("🔄 Làm mới", use_container_width=True):
-    st.session_state.pop("admin_users", None)
-    st.rerun()
+# ── Tabs ──────────────────────────────────────────────────────────────────────
+tab_users, tab_refund, tab_support = st.tabs(["👥 Người dùng", "💸 Hoàn tiền", "📬 Hỗ trợ"])
 
-# Filter logic
-users = all_users
-if search:
-    q = search.lower()
-    users = [u for u in users if q in u["email"].lower() or q in u["name"].lower()]
-if plan_filt == "Đang hoạt động":
-    users = [u for u in users if u["is_paid"]]
-elif plan_filt == "Free/Hết hạn":
-    users = [u for u in users if not u["is_paid"]]
-elif plan_filt in _PLANS:
-    users = [u for u in users if u.get("plan") == plan_filt and u["is_paid"]]
 
-st.caption(f"Hiển thị **{len(users)}** / {total} người dùng")
-st.divider()
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 1 — QUẢN LÝ NGƯỜI DÙNG
+# ════════════════════════════════════════════════════════════════════════════
+with tab_users:
+    fc1, fc2, fc3 = st.columns([3, 1.5, 1])
+    search    = fc1.text_input("🔍 Tìm email / tên", placeholder="Nhập để lọc…", label_visibility="collapsed")
+    plan_filt = fc2.selectbox("Lọc gói", ["Tất cả", "Đang hoạt động", "Free/Hết hạn"] + _PLANS, label_visibility="collapsed")
+    if fc3.button("🔄 Làm mới", use_container_width=True):
+        st.session_state.pop("admin_users", None)
+        st.rerun()
 
-# ── User list ─────────────────────────────────────────────────────────────────
-if not users:
-    st.info("Không tìm thấy người dùng nào.")
-else:
-    for u in users:
-        uid   = u["uid"]
-        email = u["email"]
-        name  = u["name"] or email.split("@")[0]
-        plan  = u.get("plan")
-        is_paid = u["is_paid"]
+    users = all_users
+    if search:
+        q = search.lower()
+        users = [u for u in users if q in u["email"].lower() or q in u["name"].lower()]
+    if plan_filt == "Đang hoạt động":
+        users = [u for u in users if u["is_paid"]]
+    elif plan_filt == "Free/Hết hạn":
+        users = [u for u in users if not u["is_paid"]]
+    elif plan_filt in _PLANS:
+        users = [u for u in users if u.get("plan") == plan_filt and u["is_paid"]]
 
-        with st.container(border=True):
-            c_info, c_plan, c_status, c_exp, c_role, c_acts = st.columns(
-                [3, 1.2, 1.4, 1.6, 1, 2.2]
-            )
+    st.caption(f"Hiển thị **{len(users)}** / {total} người dùng")
+    st.divider()
 
-            # Info
-            with c_info:
-                st.write(f"**{name}**")
-                st.caption(email)
+    if not users:
+        st.info("Không tìm thấy người dùng nào.")
+    else:
+        for u in users:
+            uid   = u["uid"]
+            email = u["email"]
+            name  = u["name"] or email.split("@")[0]
+            plan  = u.get("plan")
+            is_paid = u["is_paid"]
 
-            # Plan badge
-            c_plan.markdown(_plan_badge(plan, is_paid), unsafe_allow_html=True)
-
-            # Status badge
-            c_status.markdown(_status_badge(is_paid, u.get("expires_at")), unsafe_allow_html=True)
-
-            # Expires
-            c_exp.caption(_fmt_dt(u.get("expires_at")))
-
-            # Role
-            if u.get("role") == "admin":
-                c_role.markdown(
-                    '<span style="color:#f59e0b;font-size:0.75rem;font-weight:700;">⚡ Admin</span>',
-                    unsafe_allow_html=True,
+            with st.container(border=True):
+                c_info, c_plan, c_status, c_credits, c_exp, c_role, c_acts = st.columns(
+                    [3, 1.2, 1.4, 0.9, 1.5, 1, 2.2]
                 )
-            else:
-                c_role.caption("User")
 
-            # Action buttons
-            with c_acts:
-                b1, b2, b3 = st.columns(3)
-                if b1.button("✏️", key=f"edit_{uid}", help="Chỉnh sửa"):
-                    _edit_dialog(u)
-                if b2.button("📋", key=f"hist_{uid}", help="Xem lịch sử nhạc"):
-                    _history_dialog(uid, email)
-                if b3.button("🗑️", key=f"del_{uid}", help="Xóa tài khoản"):
-                    _delete_dialog(uid, email)
+                with c_info:
+                    st.write(f"**{name}**")
+                    st.caption(email)
+
+                c_plan.markdown(_plan_badge(plan, is_paid), unsafe_allow_html=True)
+                c_status.markdown(_status_badge(is_paid, u.get("expires_at")), unsafe_allow_html=True)
+                _cr      = u.get("credits", 0)
+                _cr_byok = u.get("is_byok", False)
+                if _cr_byok:
+                    c_credits.markdown(
+                        '<span style="color:#818cf8;font-weight:600;font-size:0.82rem;">🔑 BYOK</span>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    _cr_color = "#10b981" if _cr > 50 else ("#f59e0b" if _cr > 10 else "#6b7280")
+                    c_credits.markdown(
+                        f'<span style="color:{_cr_color};font-weight:600;font-size:0.85rem;">🪙 {_cr}</span>',
+                        unsafe_allow_html=True,
+                    )
+                c_exp.caption(_fmt_dt(u.get("expires_at")))
+
+                if u.get("role") == "admin":
+                    c_role.markdown(
+                        '<span style="color:#f59e0b;font-size:0.75rem;font-weight:700;">⚡ Admin</span>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    c_role.caption("User")
+
+                with c_acts:
+                    b1, b2, b3 = st.columns(3)
+                    if b1.button("✏️", key=f"edit_{uid}", help="Chỉnh sửa"):
+                        _edit_dialog(u)
+                    if b2.button("📋", key=f"hist_{uid}", help="Xem lịch sử nhạc"):
+                        _history_dialog(uid, email)
+                    if b3.button("🗑️", key=f"del_{uid}", help="Xóa tài khoản"):
+                        _delete_dialog(uid, email)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 2 — QUẢN LÝ HOÀN TIỀN
+# ════════════════════════════════════════════════════════════════════════════
+with tab_refund:
+    st.subheader("💸 Quản lý Hoàn tiền")
+    st.info(
+        "**Quy trình 3 bước:**  \n"
+        "1. Khách báo lỗi → bạn chuyển khoản thủ công qua app ngân hàng  \n"
+        "2. Bấm **Xác nhận Đã Hoàn Tiền** tại đây  \n"
+        "3. Hệ thống tự thu hồi gói cước của khách"
+    )
+
+    r1, r2 = st.columns([3, 1])
+    view_status = r1.selectbox(
+        "Lọc",
+        ["completed", "refunded"],
+        format_func=lambda x: "Giao dịch thành công (chưa hoàn)" if x == "completed" else "Đã hoàn tiền (lịch sử)",
+        label_visibility="collapsed",
+        key="refund_status_filter",
+    )
+    if r2.button("🔄 Làm mới", key="refresh_refunds", use_container_width=True):
+        st.session_state.pop(f"admin_payments_{view_status}", None)
+        st.rerun()
+
+    cache_key = f"admin_payments_{view_status}"
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = admin_get_payments(status=view_status)
+
+    payments: list = st.session_state[cache_key]
+
+    if not payments:
+        label = "Không có giao dịch nào đang chờ xử lý." if view_status == "completed" else "Chưa có giao dịch nào được hoàn tiền."
+        st.info(label)
+    else:
+        st.caption(f"Hiển thị **{len(payments)}** giao dịch")
+        st.divider()
+
+        for pay in payments:
+            profile   = pay.get("profiles") or {}
+            sub_plan  = pay.get("subscription_plans") or {}
+            email     = profile.get("email", "—")
+            full_name = profile.get("full_name", "")
+            plan_name = sub_plan.get("name", "—")
+            amount    = pay.get("amount_vnd", 0)
+            code      = pay.get("payment_code", "—")
+            pay_id    = pay["id"]
+            user_id   = pay["user_id"]
+            created   = _fmt_dt(pay.get("created_at"))
+
+            if view_status == "refunded":
+                header = f"✅ {code}  ·  {amount:,.0f}₫  ·  {email}"
+            else:
+                header = f"💳 {code}  ·  {amount:,.0f}₫  ·  {email}"
+
+            with st.expander(header):
+                c1, c2 = st.columns(2)
+                c1.write(f"**Khách hàng:** {full_name or email}")
+                c1.write(f"**Email:** `{email}`")
+                c1.write(f"**Mã thanh toán:** `{code}`")
+                c2.write(f"**Gói đã mua:** {plan_name}")
+                c2.write(f"**Số tiền:** {amount:,.0f} VNĐ")
+                c2.write(f"**Thời gian:** {created}")
+
+                if view_status == "refunded":
+                    refunded_at = _fmt_dt(pay.get("refunded_at"))
+                    st.success(f"Hoàn tiền lúc **{refunded_at}**")
+                    if pay.get("refund_reason"):
+                        st.caption(f"Lý do: {pay.get('refund_reason')}")
+                else:
+                    st.warning(
+                        "⚠️ Chỉ bấm xác nhận **sau khi** bạn đã chuyển khoản hoàn tiền "
+                        "cho khách trên app ngân hàng."
+                    )
+                    with st.form(key=f"refund_form_{pay_id}"):
+                        reason = st.text_input(
+                            "Lý do hoàn tiền (ghi chú nội bộ):",
+                            placeholder="VD: Khách chuyển nhầm, lỗi hệ thống…",
+                        )
+                        confirmed = st.form_submit_button(
+                            "🚨 Xác nhận Đã Hoàn Tiền", type="primary"
+                        )
+                        if confirmed:
+                            ok = admin_process_refund(pay_id, user_id, reason)
+                            if ok:
+                                st.session_state.pop(cache_key, None)
+                                st.session_state.pop("admin_payments_refunded", None)
+                                st.session_state["_admin_refresh"] = True
+                                st.success("✅ Đã cập nhật! Quyền lợi của khách hàng đã bị thu hồi.")
+                                st.rerun()
+                            else:
+                                st.error("Có lỗi xảy ra, vui lòng thử lại.")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 3 — HỘP THƯ HỖ TRỢ
+# ════════════════════════════════════════════════════════════════════════════
+with tab_support:
+    st.subheader("📬 Hộp thư Hỗ trợ")
+
+    s1, s2 = st.columns([3, 1])
+    ticket_status_filter = s1.selectbox(
+        "Lọc",
+        ["pending", "resolved", "rejected"],
+        format_func=lambda x: {
+            "pending":  "Đang chờ xử lý",
+            "resolved": "Đã giải quyết",
+            "rejected": "Đã từ chối",
+        }.get(x, x),
+        label_visibility="collapsed",
+        key="ticket_status_filter",
+    )
+    if s2.button("🔄 Làm mới", key="refresh_tickets_admin", use_container_width=True):
+        st.session_state.pop(f"admin_tickets_{ticket_status_filter}", None)
+        st.rerun()
+
+    ticket_cache_key = f"admin_tickets_{ticket_status_filter}"
+    if ticket_cache_key not in st.session_state:
+        st.session_state[ticket_cache_key] = admin_get_tickets(status=ticket_status_filter)
+
+    tickets: list = st.session_state[ticket_cache_key]
+
+    if not tickets:
+        msg = {
+            "pending":  "Tuyệt vời! Không có yêu cầu nào đang tồn đọng.",
+            "resolved": "Chưa có yêu cầu nào được giải quyết.",
+            "rejected": "Chưa có yêu cầu nào bị từ chối.",
+        }.get(ticket_status_filter, "Không có dữ liệu.")
+        st.info(msg)
+    else:
+        st.caption(f"Hiển thị **{len(tickets)}** ticket  ·  Thứ tự: cũ nhất trước")
+        st.divider()
+
+        _PRIORITY_DOT = {"pending": "🔴", "resolved": "🟢", "rejected": "⚫"}
+
+        for t in tickets:
+            profile  = t.get("profiles") or {}
+            pay_info = t.get("payment_requests")
+            email    = profile.get("email", "—")
+            name     = profile.get("full_name", "")
+            issue    = t.get("issue_type", "—")
+            created  = _fmt_dt(t.get("created_at"))
+            dot      = _PRIORITY_DOT.get(t.get("status", "pending"), "")
+
+            pay_label = ""
+            if pay_info:
+                pay_label = f"  ·  Mã GD: {pay_info.get('payment_code', '')}  ({pay_info.get('amount_vnd', 0):,.0f}₫)"
+
+            with st.expander(f"{dot} {issue}  ·  {email}{pay_label}  ·  {created}"):
+                c1, c2 = st.columns(2)
+                c1.write(f"**Khách hàng:** {name or email}")
+                c1.write(f"**Email:** `{email}`")
+                c2.write(f"**Loại:** {issue}")
+                c2.write(f"**Gửi lúc:** {created}")
+
+                st.write(f"**Nội dung:**  \n{t.get('description', '')}")
+
+                if t.get("bank_details"):
+                    st.code(
+                        f"Thông tin nhận hoàn tiền:\n{t['bank_details']}",
+                        language="text",
+                    )
+
+                if t.get("status") in ("resolved", "rejected"):
+                    resolved_at = _fmt_dt(t.get("resolved_at"))
+                    st.success(f"Đã xử lý lúc {resolved_at}")
+                    if t.get("admin_note"):
+                        st.caption(f"Ghi chú Admin: {t['admin_note']}")
+                else:
+                    st.divider()
+                    with st.form(key=f"ticket_form_{t['id']}"):
+                        admin_note = st.text_input(
+                            "Ghi chú / Phản hồi cho khách:",
+                            placeholder="VD: Đã hoàn tiền 199.000₫ vào tài khoản MB Bank…",
+                        )
+                        btn_resolve, btn_reject = st.columns(2)
+                        do_resolve = btn_resolve.form_submit_button(
+                            "✅ Đã Giải Quyết", type="primary", use_container_width=True
+                        )
+                        do_reject = btn_reject.form_submit_button(
+                            "❌ Từ chối", use_container_width=True
+                        )
+
+                        if do_resolve or do_reject:
+                            new_status = "resolved" if do_resolve else "rejected"
+                            admin_resolve_ticket(t["id"], admin_note, new_status)
+                            st.session_state.pop(ticket_cache_key, None)
+                            st.session_state.pop("admin_tickets_resolved", None)
+                            st.session_state.pop("admin_tickets_rejected", None)
+                            label = "✅ Đã đánh dấu Giải Quyết." if do_resolve else "❌ Đã Từ Chối ticket."
+                            st.success(label)
+                            st.rerun()

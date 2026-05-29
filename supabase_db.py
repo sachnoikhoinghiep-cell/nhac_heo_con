@@ -108,54 +108,56 @@ def update_profile(uid: str, updates: dict):
 # SUBSCRIPTION / PLAN
 # ===========================================================================
 
-PLAN_NAME_TO_DAYS = {
-    "Ngày": 1, "Tuần": 7, "Tháng": 30, "Năm": 365,
-}
-
-
-def get_plan_id(plan_name: str) -> Optional[int]:
-    """Trả về subscription_plans.id theo tên gói."""
+def _get_plan(plan_name: str) -> Optional[dict]:
+    """Trả về dict plan từ subscription_plans (bao gồm credits và plan_type)."""
     db = get_supabase()
     result = (
         db.table("subscription_plans")
-        .select("id")
+        .select("id, duration_days, initial_credits, plan_type")
         .eq("name", plan_name)
         .eq("is_active", True)
         .maybe_single()
         .execute()
     )
-    return result.data["id"] if result.data else None
+    return result.data
 
 
 def activate_subscription(uid: str, plan_name: str,
-                          payment_provider: str = "paypal",
+                          payment_provider: str = "manual",
                           payment_reference: str = "") -> dict:
     """
-    Hủy gói cũ (nếu có) + tạo subscription mới active.
-    Trả về dict subscription vừa tạo.
+    Kích hoạt gói cho user.
+    - Nếu plan_type = 'topup': cộng thêm credits vào gói đang active.
+    - Nếu plan_type = 'subscription': hủy gói cũ và tạo gói mới kèm credits.
     """
-    db   = get_supabase()
-    now  = datetime.now(timezone.utc)
-    days = PLAN_NAME_TO_DAYS.get(plan_name, 30)
+    db  = get_supabase()
+    now = datetime.now(timezone.utc)
+
+    plan = _get_plan(plan_name)
+    if not plan:
+        raise ValueError(f"Gói '{plan_name}' không tồn tại hoặc không còn hoạt động.")
+
+    if plan.get("plan_type") == "topup":
+        return add_credits_topup(uid, plan.get("initial_credits", 0))
+
+    days    = plan.get("duration_days", 30)
+    credits = plan.get("initial_credits", 0)
 
     # Hủy gói active cũ
     db.table("user_subscriptions").update({"status": "cancelled"}).eq(
         "user_id", uid
     ).eq("status", "active").execute()
 
-    plan_id = get_plan_id(plan_name)
-    if plan_id is None:
-        raise ValueError(f"Gói '{plan_name}' không tồn tại trong subscription_plans.")
-
     row = {
-        "user_id":            uid,
-        "plan_id":            plan_id,
-        "status":             "active",
-        "started_at":         now.isoformat(),
-        "expires_at":         (now + timedelta(days=days)).isoformat(),
-        "paid_at":            now.isoformat(),
-        "payment_provider":   payment_provider,
-        "payment_reference":  payment_reference,
+        "user_id":           uid,
+        "plan_id":           plan["id"],
+        "status":            "active",
+        "started_at":        now.isoformat(),
+        "expires_at":        (now + timedelta(days=days)).isoformat(),
+        "paid_at":           now.isoformat(),
+        "payment_provider":  payment_provider,
+        "payment_reference": payment_reference,
+        "credits":           credits,
     }
     result = db.table("user_subscriptions").insert(row).execute()
     return result.data[0]
@@ -182,6 +184,71 @@ def deactivate_subscription(uid: str):
     get_supabase().table("user_subscriptions").update(
         {"status": "cancelled"}
     ).eq("user_id", uid).eq("status", "active").execute()
+
+
+def deduct_coins(uid: str, amount: int = 1) -> int:
+    """
+    Trừ `amount` xu khỏi subscription đang active.
+    Trả về số xu còn lại (0 nếu không tìm thấy sub hoặc không đủ xu).
+
+    Bảng quy đổi:
+      - Sinh kịch bản / lời nhạc (LLM) : 1 Xu
+      - Tạo / đổi ảnh (fal.ai)          : 1 Xu
+      - Render nhạc Suno                 : 5 Xu
+    """
+    db = get_supabase()
+    now = datetime.now(timezone.utc).isoformat()
+    result = (
+        db.table("user_subscriptions")
+        .select("id, credits")
+        .eq("user_id", uid)
+        .eq("status", "active")
+        .gt("expires_at", now)
+        .gte("credits", amount)
+        .order("expires_at", desc=False)
+        .limit(1)
+        .maybe_single()
+        .execute()
+    )
+    if not result.data:
+        return 0
+    new_credits = result.data["credits"] - amount
+    db.table("user_subscriptions").update({"credits": new_credits}).eq(
+        "id", result.data["id"]
+    ).execute()
+    return new_credits
+
+
+def deduct_credit(uid: str) -> int:
+    """Alias giữ tương thích ngược — trừ 1 Xu."""
+    return deduct_coins(uid, 1)
+
+
+def add_credits_topup(uid: str, credits_to_add: int) -> dict:
+    """
+    Cộng thêm credits vào subscription đang active.
+    Trả về dict {credits: <new_total>} hoặc {} nếu không tìm thấy sub.
+    """
+    db = get_supabase()
+    now = datetime.now(timezone.utc).isoformat()
+    result = (
+        db.table("user_subscriptions")
+        .select("id, credits")
+        .eq("user_id", uid)
+        .eq("status", "active")
+        .gt("expires_at", now)
+        .order("expires_at", desc=False)
+        .limit(1)
+        .maybe_single()
+        .execute()
+    )
+    if not result.data:
+        return {}
+    new_credits = result.data["credits"] + credits_to_add
+    db.table("user_subscriptions").update({"credits": new_credits}).eq(
+        "id", result.data["id"]
+    ).execute()
+    return {"credits": new_credits}
 
 
 def extend_subscription(uid: str, extra_days: int):
@@ -221,17 +288,23 @@ def load_user_with_subscription(uid: str) -> dict:
     if not profile:
         return {}
 
-    sub = get_active_subscription(uid)
-    is_paid = sub is not None
+    sub          = get_active_subscription(uid)
+    service_type = sub.get("service_type", "bundled") if sub else None
+    is_byok      = service_type == "byok"
+    credits      = sub.get("credits", 0) if sub else 0
+    is_paid      = sub is not None and (is_byok or credits > 0)
 
     return {
-        "uid":     uid,
-        "email":   profile.get("email", ""),
-        "name":    profile.get("full_name", ""),
-        "photo":   profile.get("avatar_url", ""),
-        "role":    profile.get("role", "user"),
-        "is_paid": is_paid,
-        "plan":    sub["plan_name"] if sub else None,
+        "uid":            uid,
+        "email":          profile.get("email", ""),
+        "name":           profile.get("full_name", ""),
+        "photo":          profile.get("avatar_url", ""),
+        "role":           profile.get("role", "user"),
+        "is_paid":        is_paid,
+        "plan":           sub["plan_name"] if sub else None,
+        "credits":        credits,
+        "has_active_sub": sub is not None,
+        "is_byok":        is_byok,
     }
 
 
@@ -489,6 +562,9 @@ def admin_get_all_users(limit: int = 500) -> list:
         expires_at = _from_iso(sub["expires_at"]) if sub else None
         days_left  = max(0, (expires_at - now).days) if expires_at else None
 
+        credits      = sub.get("credits", 0) if sub else 0
+        service_type = sub.get("service_type", "bundled") if sub else None
+        is_byok      = service_type == "byok"
         result.append({
             "uid":        p["id"],
             "email":      p.get("email", ""),
@@ -496,10 +572,12 @@ def admin_get_all_users(limit: int = 500) -> list:
             "photo_url":  p.get("avatar_url", ""),
             "role":       p.get("role", "user"),
             "created_at": p.get("created_at"),
-            "is_paid":    sub is not None,
+            "is_paid":    sub is not None and (is_byok or credits > 0),
             "plan":       sub["plan_name"] if sub else None,
             "expires_at": expires_at,
             "days_left":  days_left,
+            "credits":    credits,
+            "is_byok":    is_byok,
         })
     return result
 
@@ -545,3 +623,113 @@ def admin_delete_project(project_id: str):
 
 def admin_update_project(project_id: str, updates: dict):
     update_project(project_id, updates)
+
+
+# ===========================================================================
+# ADMIN — PAYMENT / REFUND
+# ===========================================================================
+
+def admin_get_payments(status: str = "completed", limit: int = 100) -> list:
+    """Lấy payment_requests theo status, kèm email user và tên gói."""
+    db = get_supabase()
+    result = (
+        db.table("payment_requests")
+        .select("*, profiles(email, full_name), subscription_plans(name, price_vnd)")
+        .eq("status", status)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def admin_process_refund(payment_id: str, user_id: str, reason: str = "") -> bool:
+    """
+    Xử lý hoàn tiền:
+      1. Đánh dấu payment_request.status → 'refunded'
+      2. Hủy subscription active của user (status → 'cancelled')
+    """
+    db = get_supabase()
+    db.table("payment_requests").update({
+        "status":        "refunded",
+        "refund_reason": reason,
+        "refunded_at":   _now(),
+    }).eq("id", payment_id).execute()
+
+    db.table("user_subscriptions").update(
+        {"status": "cancelled"}
+    ).eq("user_id", user_id).eq("status", "active").execute()
+
+    return True
+
+
+# ===========================================================================
+# SUPPORT TICKETS
+# ===========================================================================
+
+def create_support_ticket(uid: str, issue_type: str, description: str,
+                          bank_details: str = "", payment_id: str = "") -> dict:
+    """Tạo ticket hỗ trợ mới từ phía khách hàng."""
+    db = get_supabase()
+    row: dict = {
+        "user_id":     uid,
+        "issue_type":  issue_type,
+        "description": description,
+    }
+    if bank_details:
+        row["bank_details"] = bank_details
+    if payment_id:
+        row["payment_id"] = payment_id
+    result = db.table("support_tickets").insert(row).execute()
+    return result.data[0] if result.data else {}
+
+
+def get_user_tickets(uid: str) -> list:
+    """Lấy danh sách ticket của user để hiển thị lịch sử."""
+    db = get_supabase()
+    result = (
+        db.table("support_tickets")
+        .select("*, payment_requests(payment_code, amount_vnd)")
+        .eq("user_id", uid)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data or []
+
+
+def get_user_completed_payments(uid: str, limit: int = 5) -> list:
+    """Lấy các giao dịch đã hoàn thành gần đây để chọn trong form ticket."""
+    db = get_supabase()
+    result = (
+        db.table("payment_requests")
+        .select("id, payment_code, amount_vnd, created_at, subscription_plans(name)")
+        .eq("user_id", uid)
+        .eq("status", "completed")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def admin_get_tickets(status: str = "pending", limit: int = 100) -> list:
+    """Lấy ticket theo status kèm thông tin user và giao dịch liên quan."""
+    db = get_supabase()
+    result = (
+        db.table("support_tickets")
+        .select("*, profiles(email, full_name), payment_requests(payment_code, amount_vnd)")
+        .eq("status", status)
+        .order("created_at", desc=False)  # FIFO: cũ nhất xử lý trước
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def admin_resolve_ticket(ticket_id: str, note: str = "", status: str = "resolved"):
+    """Đóng ticket: resolved (đã xử lý) hoặc rejected (từ chối)."""
+    get_supabase().table("support_tickets").update({
+        "status":      status,
+        "admin_note":  note,
+        "resolved_at": _now(),
+    }).eq("id", ticket_id).execute()
