@@ -28,7 +28,8 @@ ON CONFLICT (name) DO UPDATE SET
     is_active    = EXCLUDED.is_active;
 
 -- 4. Tái tạo view active_subscriptions — thêm service_type
-CREATE OR REPLACE VIEW active_subscriptions AS
+DROP VIEW IF EXISTS active_subscriptions;
+CREATE VIEW active_subscriptions AS
 SELECT
     us.id,
     us.user_id,

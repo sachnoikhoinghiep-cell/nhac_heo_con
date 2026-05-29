@@ -43,7 +43,8 @@ ON CONFLICT (name) DO UPDATE SET
     is_active       = EXCLUDED.is_active;
 
 -- 6. Tái tạo view active_subscriptions — thêm cột credits
-CREATE OR REPLACE VIEW active_subscriptions AS
+DROP VIEW IF EXISTS active_subscriptions;
+CREATE VIEW active_subscriptions AS
 SELECT
     us.id,
     us.user_id,
