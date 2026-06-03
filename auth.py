@@ -405,23 +405,26 @@ def _parse_dt(s) -> datetime | None:
 
 
 def _project_to_history(proj: dict) -> dict:
-    """Chuyển Supabase project dict → format tương thích legacy Firebase history."""
+    """Chuyển Supabase project dict → format tương thích với session_state.suno_tracks."""
     suno_results: dict = {}
+    is_single = proj.get("num_tracks", 1) == 1
     for track in (proj.get("project_tracks") or []):
         track_num = track.get("track_number", 1)
-        key       = f"track_{track_num}"
-        audios    = sorted(
+        # Single-track dùng key "single_track" để khớp với music_widget()
+        # Multi-track dùng "track_N" (1-indexed)
+        key = "single_track" if is_single else f"track_{track_num}"
+        audios = sorted(
             track.get("track_audio") or [],
             key=lambda x: x.get("version", "A"),
         )
         if audios:
             suno_results[key] = [
                 {
-                    "audioUrl":      a.get("audio_url", ""),
+                    "audioUrl":       a.get("audio_url", ""),
                     "streamAudioUrl": a.get("stream_url", ""),
-                    "imageUrl":      a.get("image_url", ""),
-                    "duration":      float(a.get("duration_secs") or 0),
-                    "id":            a.get("suno_id", ""),
+                    "imageUrl":       a.get("image_url", ""),
+                    "duration":       float(a.get("duration_secs") or 0),
+                    "id":             a.get("suno_id", ""),
                 }
                 for a in audios
             ]
@@ -569,10 +572,11 @@ def admin_process_refund(payment_id: str, user_id: str, reason: str = "") -> boo
 # ---------------------------------------------------------------------------
 # Credits / Coins
 # ---------------------------------------------------------------------------
-def deduct_coins(uid: str, amount: int = 1) -> int:
-    """Trừ `amount` Xu. Trả về số Xu còn lại."""
+def deduct_coins(uid: str, amount: int = 1,
+                 action: str = "deduct", description: str = "") -> int:
+    """Trừ `amount` Xu và ghi log. Trả về số Xu còn lại."""
     try:
-        return sdb.deduct_coins(uid, amount)
+        return sdb.deduct_coins(uid, amount, action=action, description=description)
     except Exception:
         return 0
 

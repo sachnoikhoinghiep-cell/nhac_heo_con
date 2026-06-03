@@ -1,4 +1,5 @@
 import streamlit as st
+from browser_notify import init_notifications
 
 
 def render():
@@ -190,6 +191,7 @@ def render():
         c6.page_link("views/app_music.py", label="🟢 Đăng nhập")
 
     st.divider()
+    init_notifications()
 
     # Floating buttons
     st.markdown("""

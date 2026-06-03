@@ -10,6 +10,7 @@ from auth import (
     update_history_suno,
 )
 from views._nav import render as nav
+from browser_notify import queue_notification, send_notification_direct
 
 nav()
 
@@ -362,6 +363,7 @@ for _k, _v in {
     "suno_tracks": {},
     "suno_audio": {},
     "suno_failed": {},        # track_key -> error message
+    "suno_ext_keys": {},      # track_key -> [(ext_key, label), …]
     "video_scripts": {},      # track_key -> script text
     "keyword_result": None,   # trending keyword lookup result
     "kw_topic_results": [],   # topic suggestions from selected keywords
@@ -683,10 +685,12 @@ def image_widget(prompt: str, img_key: str):
                             num_images=int(num_images),
                             output_format=out_fmt,
                         )
+                        send_notification_direct("🎨 Ảnh đã xong!", "Thumbnail của bạn đã tạo xong.")
                         # Trừ 1 Xu sau khi tạo ảnh thành công (chỉ với bundled)
                         _cu = st.session_state.get("user", {})
                         if _cu.get("uid") and not _cu.get("is_byok"):
-                            _rem = _deduct_coins(_cu["uid"], _img_cost)
+                            _rem = _deduct_coins(_cu["uid"], _img_cost,
+                                                 action="image", description="Tạo ảnh thumbnail")
                             st.session_state.user = {**_cu, "credits": _rem}
                     except Exception as e:
                         st.error(f"Lỗi tạo ảnh: {e}")
@@ -811,6 +815,7 @@ def fal_video_widget(prompt: str, scene_key: str):
                 video_url = call_fal_video(fal_key, model_id, payload, status_slot)
             st.session_state.fal_videos[scene_key] = video_url
             status_slot.empty()
+            queue_notification("🎬 Video đã xong!", "Video của bạn đã render xong.")
             st.rerun()
         except Exception as _fal_e:
             status_slot.empty()
@@ -856,6 +861,40 @@ def suno_generate_task(api_key: str, title: str, style: str, lyrics: str, model:
     if body.get("code") != 200:
         raise ValueError(f"Suno API lỗi {body.get('code')}: {body.get('msg', 'unknown')}")
     return body["data"]["taskId"]
+
+def suno_extend_task(api_key: str, clip_id: str, continue_at: int,
+                     title: str, style: str, lyrics: str, model: str) -> str:
+    """
+    Continuation (continue_at > 0) hoặc Remix (continue_at = 0).
+    Dùng continueClipId để Suno giữ nguyên DNA âm thanh của bài gốc.
+    """
+    title_max  = 80 if model in ("V4", "V4_5ALL") else 100
+    safe_style = (style.strip() or "")[:200]
+    headers    = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload    = {
+        "customMode":     True,
+        "instrumental":   False,
+        "model":          model,
+        "continueClipId": clip_id,
+        "continueAt":     continue_at,
+        "title":          title[:title_max],
+        "style":          safe_style,
+        "prompt":         lyrics[:3000],
+        "callBackUrl":    "https://httpbin.org/post",
+    }
+    resp = requests.post(f"{SUNO_BASE}/generate", json=payload, headers=headers, timeout=30)
+    if not resp.ok:
+        try:
+            err_body = resp.json()
+            detail = f"code={err_body.get('code')} msg={err_body.get('msg')}"
+        except Exception:
+            detail = resp.text[:400]
+        raise ValueError(f"Suno HTTP {resp.status_code}: {detail}")
+    body = resp.json()
+    if body.get("code") != 200:
+        raise ValueError(f"Suno API lỗi {body.get('code')}: {body.get('msg', 'unknown')}")
+    return body["data"]["taskId"]
+
 
 def suno_poll_task(api_key: str, task_id: str) -> dict:
     """Fetch task status once."""
@@ -987,11 +1026,76 @@ def run_suno_generation(title: str, style: str, lyrics: str, track_key: str):
             # Trừ 5 Xu sau khi render nhạc thành công (chỉ với bundled)
             _cu = st.session_state.get("user", {})
             if _cu.get("uid") and not _cu.get("is_byok"):
-                _rem = _deduct_coins(_cu["uid"], COIN_COSTS["suno"])
+                _rem = _deduct_coins(_cu["uid"], COIN_COSTS["suno"],
+                                     action="suno", description=f"Render nhạc: {title[:60]}")
                 st.session_state.user = {**_cu, "credits": _rem}
+            queue_notification("🎵 Nhạc đã xong!", f'"{title[:50]}" đã render xong.')
             st.rerun()
             return
 
+        except Exception as e:
+            bar_slot.empty()
+            preview_slot.empty()
+            if attempt < MAX_ATTEMPTS:
+                info_slot.warning(f"⚠️ Lần {attempt} thất bại ({e}) — thử lại sau 5s…")
+                time.sleep(5)
+            else:
+                info_slot.error(f"❌ {e}")
+
+
+def run_suno_variation(clip_id: str, continue_at: int,
+                       title: str, style: str, lyrics: str,
+                       parent_key: str, label: str):
+    """
+    Tạo continuation hoặc remix từ clip_id đã có.
+    Kết quả được lưu vào suno_tracks dưới key mới và thêm vào suno_ext_keys[parent_key].
+    """
+    suno_key = st.session_state.get("suno_api_key", "").strip()
+    model    = st.session_state.get("suno_model", "V5_5")
+    if not suno_key:
+        st.warning("Nhập Suno API Key ở sidebar.")
+        return
+
+    ext_key      = f"{parent_key}_x{int(time.time())}"
+    info_slot    = st.empty()
+    bar_slot     = st.empty()
+    preview_slot = st.empty()
+
+    MAX_ATTEMPTS = 2
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            info_slot.info(f"📤 Gửi yêu cầu: **{title[:60]}**"
+                           + (f" (lần {attempt})" if attempt > 1 else ""))
+            task_id = suno_extend_task(suno_key, clip_id, continue_at,
+                                       title, style, lyrics, model)
+            info_slot.info(f"🆔 Task: `{task_id}` — chờ Suno (2–3 phút)…")
+            bar      = bar_slot.progress(0.0, text="⏳ Đang khởi động…")
+            suno_list = suno_poll_with_ui(suno_key, task_id, bar, preview_slot)
+
+            st.session_state.suno_tracks[ext_key] = suno_list
+            st.session_state.suno_ext_keys.setdefault(parent_key, []).append((ext_key, label))
+            bar_slot.progress(1.0, text="✅ 100% — Đang tải MP3…")
+
+            for vi, track in enumerate(suno_list):
+                url = track.get("audioUrl", "")
+                if url:
+                    st.session_state.suno_audio[f"{ext_key}_v{vi}"] = _fetch_audio_bytes(url)
+
+            durations = " / ".join(fmt_duration(t.get("duration")) for t in suno_list)
+            info_slot.success(f"✅ Hoàn thành: **{title}** — {durations}")
+            bar_slot.empty()
+            preview_slot.empty()
+
+            _cu = st.session_state.get("user", {})
+            if _cu.get("uid") and not _cu.get("is_byok"):
+                _vtype = "Tiếp tục" if continue_at > 0 else "Remix"
+                _rem = _deduct_coins(_cu["uid"], COIN_COSTS["suno"],
+                                     action="suno",
+                                     description=f"{_vtype}: {title[:50]}")
+                st.session_state.user = {**_cu, "credits": _rem}
+            queue_notification("🎵 Nhạc đã xong!", f'"{title[:50]}" đã render xong.')
+            st.rerun()
+            return
         except Exception as e:
             bar_slot.empty()
             preview_slot.empty()
@@ -1120,21 +1224,42 @@ def generate_all_tracks(items: list, max_workers: int = 5):
     bar.progress(1.0, text=f"✅ Xong {len(completed)}/{n} tracks!")
     _render_log()
     _persist_suno_to_history()
+    queue_notification("🎵 Album đã xong!", f"{len(completed)}/{n} tracks đã render xong.")
     st.rerun()
 
 
+_BASE_TRACK_KEY_SET = {"single_track"}
+
+def _is_base_track_key(key: str) -> bool:
+    """True nếu key là track gốc (single_track hoặc track_N), False nếu là ext/variation."""
+    if key in _BASE_TRACK_KEY_SET:
+        return True
+    if key.startswith("track_") and key[6:].isdigit():
+        return True
+    return False
+
+
 def _persist_suno_to_history():
-    """Save current suno_tracks URLs to the active Firestore history doc."""
+    """Lưu audio URLs của các track gốc vào project history trên Supabase."""
     user    = st.session_state.get("user")
     hist_id = st.session_state.get("current_history_id")
     if not user or not hist_id or not st.session_state.suno_tracks:
         return
     slim = {
-        tk: [{"audioUrl": t.get("audioUrl", ""), "streamAudioUrl": t.get("streamAudioUrl", ""),
-               "duration": t.get("duration", 0), "id": t.get("id", "")}
-             for t in tracks]
+        tk: [
+            {
+                "audioUrl":       t.get("audioUrl", ""),
+                "streamAudioUrl": t.get("streamAudioUrl", ""),
+                "duration":       t.get("duration", 0),
+                "id":             t.get("id", ""),
+            }
+            for t in tracks
+        ]
         for tk, tracks in st.session_state.suno_tracks.items()
+        if _is_base_track_key(tk)   # bỏ qua ext/variation keys
     }
+    if not slim:
+        return
     try:
         update_history_suno(user["uid"], hist_id, slim)
     except Exception:
@@ -1377,6 +1502,154 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
                     except Exception as e:
                         st.error(f"Lỗi tạo storyboard: {e}")
 
+    # ── Remix / Tiếp tục ──────────────────────────────────────────────────────
+    if tracks:
+        _is_byok     = st.session_state.get("user", {}).get("is_byok", False)
+        _cost_sfx    = "" if _is_byok else f" ({COIN_COSTS['suno']} Xu)"
+        _ver_opts    = [
+            (vi, t.get("id", ""), float(t.get("duration") or 0),
+             f"Version {'AB'[vi]} ({fmt_duration(t.get('duration'))})")
+            for vi, t in enumerate(tracks[:2])
+            if t.get("id")
+        ]
+
+        with st.expander("🔁 Remix / ▶️ Tiếp tục bài này", expanded=False):
+            if not _ver_opts:
+                st.warning("Không tìm thấy clip ID. Thử tạo lại bài nhạc.")
+            else:
+                _tab_ext, _tab_rmx = st.tabs(["▶️ Tiếp tục (Extend)", "🔁 Remix"])
+
+                # ── Extend ────────────────────────────────────────────────────
+                with _tab_ext:
+                    st.caption("Kéo dài bài nhạc từ một mốc thời gian bất kỳ.")
+                    _ext_ver_lbl = st.radio(
+                        "Chọn phiên bản gốc:",
+                        [v[3] for v in _ver_opts],
+                        horizontal=True,
+                        key=f"ext_ver_{track_key}",
+                    )
+                    _ext_vi, _ext_clip, _ext_dur, _ = next(
+                        v for v in _ver_opts if v[3] == _ext_ver_lbl
+                    )
+                    _ext_max = max(10, int(_ext_dur))
+                    _ext_default = min(int(_ext_dur * 0.75), _ext_max - 5) if _ext_dur > 10 else 0
+                    _ext_at = st.slider(
+                        "Tiếp tục từ giây thứ:",
+                        min_value=0, max_value=_ext_max,
+                        value=_ext_default, step=1,
+                        key=f"ext_at_{track_key}",
+                    )
+                    st.caption(
+                        f"⏱ Sẽ tạo từ **{fmt_duration(_ext_at)}** "
+                        f"/ tổng **{fmt_duration(_ext_dur)}**"
+                    )
+                    _ext_title  = st.text_input(
+                        "Tiêu đề phần tiếp:",
+                        value=f"{title} (Part 2)",
+                        key=f"ext_title_{track_key}",
+                    )
+                    _ext_style  = st.text_area(
+                        "Style (giữ nguyên hoặc đổi):",
+                        value=style, height=60,
+                        key=f"ext_style_{track_key}",
+                    )
+                    _ext_lyrics = st.text_area(
+                        "Lời tiếp theo (để trống = Suno tự sinh):",
+                        value="", height=80,
+                        placeholder="[Verse 2]\nLời tiếp theo…",
+                        key=f"ext_lyrics_{track_key}",
+                    )
+                    _ext_coins = st.session_state.get("user", {}).get("credits", 0)
+                    _ext_ok    = _is_byok or _ext_coins >= COIN_COSTS["suno"]
+                    if not _ext_ok:
+                        st.button(f"🪙 Không đủ Xu (cần {COIN_COSTS['suno']})",
+                                  disabled=True, key=f"btn_ext_{track_key}")
+                    elif st.button(f"▶️ Tạo phần tiếp{_cost_sfx}", type="primary",
+                                   use_container_width=True, key=f"btn_ext_{track_key}"):
+                        run_suno_variation(
+                            clip_id=_ext_clip,
+                            continue_at=_ext_at,
+                            title=(_ext_title.strip() or f"{title} (Part 2)"),
+                            style=(_ext_style.strip() or style),
+                            lyrics=_ext_lyrics.strip(),
+                            parent_key=track_key,
+                            label=f"Tiếp tục từ {fmt_duration(_ext_at)} (Ver {'AB'[_ext_vi]})",
+                        )
+
+                # ── Remix ─────────────────────────────────────────────────────
+                with _tab_rmx:
+                    st.caption(
+                        "Tái tạo bài nhạc với style / lời mới, "
+                        "giữ nguyên DNA âm thanh của phiên bản gốc."
+                    )
+                    _rmx_ver_lbl = st.radio(
+                        "Chọn phiên bản gốc:",
+                        [v[3] for v in _ver_opts],
+                        horizontal=True,
+                        key=f"rmx_ver_{track_key}",
+                    )
+                    _rmx_vi, _rmx_clip, _rmx_dur, _ = next(
+                        v for v in _ver_opts if v[3] == _rmx_ver_lbl
+                    )
+                    _rmx_title = st.text_input(
+                        "Tiêu đề remix:",
+                        value=f"{title} (Remix)",
+                        key=f"rmx_title_{track_key}",
+                    )
+                    _rmx_style = st.text_area(
+                        "Style mới:",
+                        value=style, height=60,
+                        key=f"rmx_style_{track_key}",
+                    )
+                    _rmx_lyrics = st.text_area(
+                        "Lời mới (để trống = giữ lời gốc):",
+                        value="", height=80,
+                        placeholder="[Verse 1]\nLời mới…",
+                        key=f"rmx_lyrics_{track_key}",
+                    )
+                    _rmx_coins = st.session_state.get("user", {}).get("credits", 0)
+                    _rmx_ok    = _is_byok or _rmx_coins >= COIN_COSTS["suno"]
+                    if not _rmx_ok:
+                        st.button(f"🪙 Không đủ Xu (cần {COIN_COSTS['suno']})",
+                                  disabled=True, key=f"btn_rmx_{track_key}")
+                    elif st.button(f"🔁 Tạo Remix{_cost_sfx}", type="primary",
+                                   use_container_width=True, key=f"btn_rmx_{track_key}"):
+                        run_suno_variation(
+                            clip_id=_rmx_clip,
+                            continue_at=0,
+                            title=(_rmx_title.strip() or f"{title} (Remix)"),
+                            style=(_rmx_style.strip() or style),
+                            lyrics=(_rmx_lyrics.strip() or lyrics),
+                            parent_key=track_key,
+                            label=f"Remix (Ver {'AB'[_rmx_vi]})",
+                        )
+
+        # ── Các biến thể đã tạo ───────────────────────────────────────────────
+        _ext_list = st.session_state.suno_ext_keys.get(track_key, [])
+        if _ext_list:
+            st.markdown(f"**🎵 Biến thể đã tạo ({len(_ext_list)})**")
+            for _ek, _elabel in _ext_list:
+                _ext_tracks = st.session_state.suno_tracks.get(_ek, [])
+                if not _ext_tracks:
+                    continue
+                with st.expander(f"🎵 {_elabel}", expanded=False):
+                    _etabs = st.tabs(["Version A", "Version B"])
+                    for _evi, (_etab, _et) in enumerate(zip(_etabs, _ext_tracks)):
+                        with _etab:
+                            _eurl = _et.get("audioUrl", "")
+                            if _eurl:
+                                st.audio(_eurl, format="audio/mpeg")
+                            _ebytes = st.session_state.suno_audio.get(f"{_ek}_v{_evi}")
+                            if _ebytes:
+                                _esafe = _elabel[:30].replace(" ", "_").replace("/", "-")
+                                st.download_button(
+                                    f"⬇️ Tải MP3 – Version {'AB'[_evi]}",
+                                    data=_ebytes,
+                                    file_name=f"{_esafe}_v{'AB'[_evi]}.mp3",
+                                    mime="audio/mpeg",
+                                    key=f"dl_ext_{_ek}_v{_evi}",
+                                )
+
 # ---------------------------------------------------------------------------
 # JSON helpers
 # ---------------------------------------------------------------------------
@@ -1579,9 +1852,10 @@ with st.sidebar:
                             }
                             _suno = _h.get("suno_results", {})
                             if _suno:
-                                st.session_state.suno_tracks  = _suno
-                                st.session_state.suno_audio   = {}
-                                st.session_state.suno_failed  = {}
+                                st.session_state.suno_tracks   = _suno
+                                st.session_state.suno_audio    = {}
+                                st.session_state.suno_failed   = {}
+                                st.session_state.suno_ext_keys = {}
                             st.session_state.current_history_id = _h["id"]
                             st.rerun()
             except Exception:
@@ -2146,15 +2420,17 @@ if generate_btn:
                 # Trừ 1 Xu (script) sau khi tạo thành công (chỉ với bundled)
                 try:
                     if not st.session_state.user.get("is_byok"):
-                        _remaining = _deduct_coins(st.session_state.user["uid"], COIN_COSTS["script"])
+                        _remaining = _deduct_coins(st.session_state.user["uid"], COIN_COSTS["script"],
+                                                   action="script", description="Sinh kịch bản / lời nhạc")
                         st.session_state.user = {**st.session_state.user, "credits": _remaining}
                 except Exception:
                     pass
             # Reset images & audio khi tạo plan mới
             st.session_state.images = {}
-            st.session_state.suno_tracks = {}
-            st.session_state.suno_audio = {}
-            st.session_state.suno_failed = {}
+            st.session_state.suno_tracks   = {}
+            st.session_state.suno_audio    = {}
+            st.session_state.suno_failed   = {}
+            st.session_state.suno_ext_keys = {}
             st.session_state.video_scripts = {}
             st.rerun()
 
@@ -2200,6 +2476,10 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
                     claude_model="claude-haiku-4-5-20251001",
                 )
                 _kw_raw = _kw_raw.strip()
+                if "```json" in _kw_raw:
+                    _kw_raw = _kw_raw.split("```json")[1].split("```")[0].strip()
+                elif "```" in _kw_raw:
+                    _kw_raw = _kw_raw.split("```")[1].split("```")[0].strip()
                 if not _kw_raw:
                     st.error("AI trả về phản hồi rỗng. Thử lại.")
                 else:

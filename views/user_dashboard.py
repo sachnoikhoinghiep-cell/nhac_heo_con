@@ -10,6 +10,7 @@ from auth import (
     get_user_tickets,
     get_user_completed_payments,
 )
+from supabase_db import get_coin_transactions
 from views._nav import render as _nav
 
 _nav()
@@ -157,7 +158,7 @@ def _delete_dialog(item: dict):
 # ── Page ──────────────────────────────────────────────────────────────────────
 st.title("👤 Tài khoản của tôi")
 
-tab_plan, tab_projects, tab_support = st.tabs(["📦 Gói dịch vụ", "🎵 Projects của tôi", "🎧 Hỗ trợ"])
+tab_plan, tab_projects, tab_coins, tab_support = st.tabs(["📦 Gói dịch vụ", "🎵 Projects của tôi", "🪙 Lịch sử Xu", "🎧 Hỗ trợ"])
 
 # ─── Tab 1: Plan ──────────────────────────────────────────────────────────────
 with tab_plan:
@@ -338,7 +339,81 @@ with tab_projects:
                             _delete_dialog(item)
 
 
-# ─── Tab 3: Hỗ trợ ───────────────────────────────────────────────────────────
+# ─── Tab 3: Lịch sử Xu ───────────────────────────────────────────────────────
+with tab_coins:
+    _ACTION_ICON = {
+        "suno":     "🎵",
+        "image":    "🎨",
+        "script":   "📝",
+        "activate": "🎁",
+        "topup":    "🔋",
+        "deduct":   "🪙",
+    }
+    _ACTION_LABEL = {
+        "suno":     "Render nhạc",
+        "image":    "Tạo ảnh",
+        "script":   "Kịch bản",
+        "activate": "Kích hoạt gói",
+        "topup":    "Nạp thêm",
+        "deduct":   "Tiêu Xu",
+    }
+
+    col_hdr2, col_ref2 = st.columns([4, 1])
+    col_hdr2.write("**Lịch sử thu chi Xu**")
+    if col_ref2.button("🔄 Làm mới", key="refresh_coins", use_container_width=True):
+        st.session_state.pop("coin_tx_cache", None)
+        st.rerun()
+
+    if "coin_tx_cache" not in st.session_state:
+        st.session_state["coin_tx_cache"] = get_coin_transactions(uid, limit=100)
+
+    _txs: list = st.session_state["coin_tx_cache"]
+
+    if not _txs:
+        st.info("Chưa có giao dịch Xu nào. Lịch sử sẽ hiện ở đây sau lần tạo nhạc đầu tiên.")
+    else:
+        # ── Thống kê tổng hợp ─────────────────────────────────────────────
+        _earned = sum(t["delta"] for t in _txs if t["delta"] > 0)
+        _spent  = sum(-t["delta"] for t in _txs if t["delta"] < 0)
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("🪙 Số dư hiện tại", user.get("credits", "—"))
+        _c2.metric("📥 Tổng Xu nhận", f"+{_earned}")
+        _c3.metric("📤 Tổng Xu đã dùng", f"-{_spent}")
+
+        st.divider()
+
+        # ── Danh sách giao dịch ───────────────────────────────────────────
+        for _tx in _txs:
+            _delta   = _tx.get("delta", 0)
+            _action  = _tx.get("action", "deduct")
+            _desc    = _tx.get("description") or _ACTION_LABEL.get(_action, _action)
+            _balance = _tx.get("balance", 0)
+            _created = _fmt_dt(_tx.get("created_at", ""))
+            _icon    = _ACTION_ICON.get(_action, "🪙")
+            _is_earn = _delta > 0
+
+            _color   = "#22c55e" if _is_earn else "#f87171"
+            _sign    = f"+{_delta}" if _is_earn else str(_delta)
+            _bg      = "rgba(34,197,94,0.06)" if _is_earn else "rgba(248,113,113,0.06)"
+            _border  = "rgba(34,197,94,0.2)" if _is_earn else "rgba(248,113,113,0.15)"
+
+            st.markdown(f"""
+<div style="display:flex;align-items:center;gap:12px;
+            padding:10px 14px;margin-bottom:6px;
+            background:{_bg};border:1px solid {_border};
+            border-radius:10px;">
+  <div style="font-size:1.3rem;min-width:28px;text-align:center">{_icon}</div>
+  <div style="flex:1;min-width:0">
+    <div style="font-weight:600;font-size:0.88rem;color:rgba(255,255,255,0.92);
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{_desc}</div>
+    <div style="font-size:0.74rem;color:rgba(255,255,255,0.45);margin-top:1px">{_created}
+      &nbsp;·&nbsp;Số dư: {_balance} Xu</div>
+  </div>
+  <div style="font-size:1rem;font-weight:800;color:{_color};white-space:nowrap">{_sign} Xu</div>
+</div>""", unsafe_allow_html=True)
+
+
+# ─── Tab 4: Hỗ trợ ───────────────────────────────────────────────────────────
 with tab_support:
     st.subheader("🎧 Hỗ trợ & Yêu cầu Hoàn tiền")
     st.write("Gặp sự cố với giao dịch hoặc hệ thống? Gửi yêu cầu để Admin xử lý.")

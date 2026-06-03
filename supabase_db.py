@@ -160,6 +160,16 @@ def activate_subscription(uid: str, plan_name: str,
         "credits":           credits,
     }
     result = db.table("user_subscriptions").insert(row).execute()
+    try:
+        db.table("coin_transactions").insert({
+            "user_id":     uid,
+            "delta":       credits,
+            "balance":     credits,
+            "action":      "activate",
+            "description": f"Kích hoạt gói {plan_name} (+{credits} Xu)",
+        }).execute()
+    except Exception:
+        pass
     return result.data[0]
 
 
@@ -186,15 +196,17 @@ def deactivate_subscription(uid: str):
     ).eq("user_id", uid).eq("status", "active").execute()
 
 
-def deduct_coins(uid: str, amount: int = 1) -> int:
+def deduct_coins(uid: str, amount: int = 1,
+                 action: str = "deduct", description: str = "") -> int:
     """
     Trừ `amount` xu khỏi subscription đang active.
     Trả về số xu còn lại (0 nếu không tìm thấy sub hoặc không đủ xu).
+    Tự động ghi log vào coin_transactions.
 
     Bảng quy đổi:
-      - Sinh kịch bản / lời nhạc (LLM) : 1 Xu
-      - Tạo / đổi ảnh (fal.ai)          : 1 Xu
-      - Render nhạc Suno                 : 5 Xu
+      - Sinh kịch bản / lời nhạc (LLM) : 1 Xu  (action='script')
+      - Tạo / đổi ảnh (fal.ai)          : 1 Xu  (action='image')
+      - Render nhạc Suno                 : 5 Xu  (action='suno')
     """
     db = get_supabase()
     now = datetime.now(timezone.utc).isoformat()
@@ -216,6 +228,16 @@ def deduct_coins(uid: str, amount: int = 1) -> int:
     db.table("user_subscriptions").update({"credits": new_credits}).eq(
         "id", result.data["id"]
     ).execute()
+    try:
+        db.table("coin_transactions").insert({
+            "user_id":     uid,
+            "delta":       -amount,
+            "balance":     new_credits,
+            "action":      action,
+            "description": description or f"-{amount} Xu",
+        }).execute()
+    except Exception:
+        pass
     return new_credits
 
 
@@ -248,6 +270,16 @@ def add_credits_topup(uid: str, credits_to_add: int) -> dict:
     db.table("user_subscriptions").update({"credits": new_credits}).eq(
         "id", result.data["id"]
     ).execute()
+    try:
+        db.table("coin_transactions").insert({
+            "user_id":     uid,
+            "delta":       credits_to_add,
+            "balance":     new_credits,
+            "action":      "topup",
+            "description": f"Nạp thêm +{credits_to_add} Xu",
+        }).execute()
+    except Exception:
+        pass
     return {"credits": new_credits}
 
 
@@ -388,6 +420,16 @@ def create_project(uid: str, name: str, topic: str, genre: str,
 
     # Tạo các track rows
     tracks = claude_result.get("tracks") or []
+    if not tracks:
+        # Single-track: result có title/lyrics/music_style ở top-level
+        single = {
+            "title":      claude_result.get("title", name),
+            "lyrics":     claude_result.get("lyrics", ""),
+            "style_tags": claude_result.get("music_style", ""),
+        }
+        if any(single.values()):
+            tracks = [single]
+
     if tracks:
         track_rows = [
             {
@@ -395,7 +437,7 @@ def create_project(uid: str, name: str, topic: str, genre: str,
                 "track_number": i + 1,
                 "title":        t.get("title", f"Track {i+1}"),
                 "lyrics":       t.get("lyrics", ""),
-                "style_tags":   t.get("style_tags", ""),
+                "style_tags":   t.get("style_tags", "") or t.get("music_style", ""),
                 "status":       "pending",
             }
             for i, t in enumerate(tracks)
@@ -497,20 +539,48 @@ def upsert_track_audio(project_id: str, track_number: int,
     ).execute()
 
 
+def _parse_track_num(key: str) -> Optional[int]:
+    """
+    Chuyển track key sang 1-indexed track number.
+
+    Hỗ trợ các định dạng:
+      "single_track"  → 1
+      "track_1"       → 1   (1-indexed, dùng cho album)
+      "track_2"       → 2
+      "0"             → 1   (0-indexed legacy)
+      "1"             → 2   (0-indexed legacy)
+    Bỏ qua các ext/variation key (chứa "_x"):
+      "track_1_x1234" → None
+    """
+    if "_x" in key:
+        return None
+    if key == "single_track":
+        return 1
+    if key.startswith("track_"):
+        try:
+            return int(key[len("track_"):])
+        except ValueError:
+            return None
+    try:
+        return int(key) + 1  # 0-indexed legacy
+    except ValueError:
+        return None
+
+
 def save_suno_results(project_id: str, suno_results: dict):
     """
     Lưu toàn bộ kết quả Suno vào DB.
-    suno_results format: {track_number: [suno_track_A, suno_track_B], ...}
-    Đồng thời cập nhật project status = 'completed'.
+    Hỗ trợ key format: "single_track", "track_N", hoặc "N" (0-indexed legacy).
+    Bỏ qua ext/variation keys (chứa "_x").
     """
     db = get_supabase()
-    for track_num_str, tracks in suno_results.items():
-        track_num = int(track_num_str) + 1  # 0-indexed → 1-indexed
+    for key, tracks in suno_results.items():
+        track_num = _parse_track_num(key)
+        if track_num is None:
+            continue
         for vi, suno_track in enumerate(tracks if isinstance(tracks, list) else [tracks]):
             version = "AB"[vi] if vi < 2 else str(vi)
             upsert_track_audio(project_id, track_num, version, suno_track)
-
-        # Đánh dấu track done
         update_track(project_id, track_num, {"status": "done"})
 
     update_project(project_id, {"status": "completed"})
@@ -733,3 +803,24 @@ def admin_resolve_ticket(ticket_id: str, note: str = "", status: str = "resolved
         "admin_note":  note,
         "resolved_at": _now(),
     }).eq("id", ticket_id).execute()
+
+
+# ===========================================================================
+# COIN TRANSACTIONS
+# ===========================================================================
+
+def get_coin_transactions(uid: str, limit: int = 100) -> list:
+    """Lấy lịch sử giao dịch Xu của user, mới nhất trước."""
+    db = get_supabase()
+    try:
+        result = (
+            db.table("coin_transactions")
+            .select("id, delta, balance, action, description, created_at")
+            .eq("user_id", uid)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return result.data or []
+    except Exception:
+        return []
