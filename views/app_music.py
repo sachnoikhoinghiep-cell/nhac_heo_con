@@ -528,6 +528,12 @@ GENRE_CONFIG = {
         "hashtags": "#progressivehouse #proghouse #epicdrop #festival #mainstage #rave2026",
     },
     # ── Nhạc Việt ─────────────────────────────────────────────────────────────
+    "Deep Chill (Việt Mix)": {
+        "bpm": "105-115 BPM",
+        "style_tags": "Deep Chill, Viet Mix Chill, Lofi House, Deep Bass, Emotional Male/Female Vocal, Atmospheric Pads, Soft Kick, Melancholy",
+        "visual_vibe": "Lonely silhouette at a rainy window, neon lights reflecting on wet asphalt, late night cafe, moody sunset, cinematic lofi aesthetic — navy, deep purple, amber tones",
+        "hashtags": "#deepchill #vietmix #nhacchill #lofihoanghon #nhacbuon #chillout #saychill #vietmixchill #nhacthattinh #deephouse",
+    },
     "Nhạc Vàng / Bolero": {
         "bpm": "60-80 BPM",
         "style_tags": "Bolero, Guitar Điện, Kèn Saxophone, Câu từ sâu lắng, Nostalgic, Vietnamese Traditional",

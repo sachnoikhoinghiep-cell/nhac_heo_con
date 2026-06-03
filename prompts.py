@@ -111,6 +111,18 @@ Exception: the "visual_prompt" field must ALWAYS be written in English regardles
         - Pipa (琵琶 / Tỳ Bà): rhythmic accent and color — staccato plucks, occasional melodic fills, bridges lyrical and rhythmic roles.
     - Visual prompt tone (Nano Banana): ink-wash painting style (thủy mặc / 水墨画) OR 3D isometric ancient Chinese scene. Preferred settings: misty bamboo forest (rừng trúc mờ sương), candlelit scholar's study beside a latticed window (thư phòng cổ kính), or a lone swordsman standing beneath a falling peach blossom tree (kiếm khách dưới gốc đào). Palette: ink-grey, jade-green, soft gold, mist-white. No saturated modern colors.
     - BPM: 65-80 (rubato allowed for solo passages), instruments: Guzheng, Dizi, Pipa, Erhu, wind chimes, flowing water ambience, natural room reverb. No electronic elements.
+- IF genre == "Deep Chill (Việt Mix)":
+    - Lyrics: Write in Vietnamese tự sự (confessional) style — draw from nhạc trẻ buồn, dân ca, or bolero reimagined modern. Core themes: chia ly (separation), người yêu đã đi lấy chồng (lover married another), bến sông / thuyền hoa / tiếc nuối thanh xuân, sự cô đơn giữa thành phố. Use smooth rhyme scheme (vần cuối mượt mà), flowing cadence, no forced rhymes. Every verse must feel like a late-night confession, heavy with unexpressed emotion.
+    - Sound structure:
+        - [Intro: Rain & Piano]: Tiếng mưa rơi rả rích, hòa cùng tiếng Piano mờ ảo (Muffled Piano) hoặc Guitar thùng buồn bã — sparse and melancholic, 8 bars establishing lonely atmosphere before any beat enters.
+        - [Verse: Reverb Vocals]: Giọng hát cất lên đầy tâm sự, heavy reverb/delay (vocal feels far away and intimate simultaneously). Nhịp trống vỗ nhẹ nhàng: Finger snaps hoặc Soft Claps — no heavy kick yet.
+        - [THE DROP: Deep House Chill]: KHÔNG bùng nổ ồn ào. Deep Bass đập từng nhịp sâu, tròn trịa — each bass hit feels like a heartbeat dropping. Soft Four-on-the-floor House kick enters (slow, deliberate, never aggressive). Layer: Sáo trúc (Flute) melody hoặc Vocal Chops lặp đi lặp lại tạo sự miên man và cô đơn. Bass and beat together create the "Say Chill House" signature: heavy yet weightless.
+        - [Bridge: Breakdown]: Strip back to just piano + rain + whispered vocals — emotional peak before final chorus.
+        - [Outro: Fade]: Deep Bass continues alone, rain sound returns, voice fades into reverb tail.
+    - Insert ALL structure markers in lyrics: [Intro: Mưa & Piano], [Verse: Reverb Vocals], [THE DROP: Deep Bass + Soft House Kick], [Bridge: Stripped Down], [Outro: Fade into Rain].
+    - Visual prompt tone (English, for Nano Banana / Kyma): Dark cinematic lofi aesthetic. Color palette: navy blue, deep purple, burnt amber, wet neon reflections. Scene options: lone figure smoking under rain-soaked awning, dimly lit café corner with flickering yellow lamp, solitary ferry crossing a dark empty river at night. Camera: wide, static, distant — like watching grief from across the street.
+    - If create_mv: video_scenes should describe Lofi Loop Video style — static image with subtle animated effect loops (rain falling on car window, steam rising from coffee cup, headlights sweeping across wet road at night). Cost-efficient render, maximum chill vibe.
+    - BPM: 105-115, instruments: Deep Bass (round, slow, heartbeat-like), Soft Four-on-the-floor House kick, Atmospheric Pads (wide reverb), Emotional Male or Female Vocal (heavy reverb), Muffled Piano or Acoustic Guitar, Sáo Trúc (Flute) or Vocal Chops, Rain Ambience layer.
 
 # Output Format for SINGLE track (n=1):
 {
