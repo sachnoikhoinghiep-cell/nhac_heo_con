@@ -2476,16 +2476,10 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
                     claude_model="claude-haiku-4-5-20251001",
                 )
                 _kw_raw = _kw_raw.strip()
-                if "```json" in _kw_raw:
-                    _kw_raw = _kw_raw.split("```json")[1].split("```")[0].strip()
-                elif "```" in _kw_raw:
-                    _kw_raw = _kw_raw.split("```")[1].split("```")[0].strip()
                 if not _kw_raw:
                     st.error("AI trả về phản hồi rỗng. Thử lại.")
                 else:
-                    st.session_state.keyword_result = json.loads(
-                        _fix_control_chars(_kw_raw)
-                    )
+                    st.session_state.keyword_result = parse_json(_kw_raw)
             except Exception as _kw_e:
                 st.error(f"Lỗi tra cứu: {_kw_e}")
 
@@ -2534,7 +2528,7 @@ with st.expander("📈 Trending YouTube Keywords", expanded=False):
                             claude_model="claude-haiku-4-5-20251001",
                         )
                         _tp_raw = _tp_raw.strip()
-                        _topics = json.loads(_fix_control_chars(_tp_raw))
+                        _topics = parse_json(_tp_raw)
                         _topics.sort(key=lambda x: x.get("score", 0), reverse=True)
                         st.session_state.kw_topic_results = _topics
                     except Exception as _tp_e:
