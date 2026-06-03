@@ -1379,11 +1379,11 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
 
                 audio_bytes = st.session_state.suno_audio.get(f"{track_key}_v{vi}")
                 if audio_bytes:
-                    safe = title[:40].replace(" ", "_").replace("/", "-")
+                    _dl_title = _clean_filename(t.get("title") or title)[:60]
                     st.download_button(
                         f"⬇️ Tải MP3 – Version {'AB'[vi]}",
                         data=audio_bytes,
-                        file_name=f"{safe}_v{'AB'[vi]}.mp3",
+                        file_name=f"{_dl_title} - Version {'AB'[vi]}.mp3",
                         mime="audio/mpeg",
                         key=f"dl_mp3_{track_key}_v{vi}",
                     )
@@ -1641,16 +1641,29 @@ def music_widget(title: str, style: str, lyrics: str, track_key: str):
                                 st.audio(_eurl, format="audio/mpeg")
                             _ebytes = st.session_state.suno_audio.get(f"{_ek}_v{_evi}")
                             if _ebytes:
-                                _esafe = _elabel[:30].replace(" ", "_").replace("/", "-")
+                                _edl_title = _clean_filename(_et.get("title") or _elabel)[:60]
                                 st.download_button(
                                     f"⬇️ Tải MP3 – Version {'AB'[_evi]}",
                                     data=_ebytes,
-                                    file_name=f"{_esafe}_v{'AB'[_evi]}.mp3",
+                                    file_name=f"{_edl_title} - Version {'AB'[_evi]}.mp3",
                                     mime="audio/mpeg",
                                     key=f"dl_ext_{_ek}_v{_evi}",
                                 )
 
 # ---------------------------------------------------------------------------
+# Filename helpers
+# ---------------------------------------------------------------------------
+def _clean_filename(title: str) -> str:
+    """Làm sạch tên file MP3: bỏ Track_N prefix, underscore→space, bỏ _vX suffix."""
+    import re
+    s = title.strip()
+    s = re.sub(r'^(?:Track[_ ]?\d+[_ :\-]+)+', '', s, flags=re.IGNORECASE)
+    s = s.replace("_", " ")
+    s = re.sub(r'\s*[_ ][vV]?[AB]\s*$', '', s)
+    s = re.sub(r'\s{2,}', ' ', s)
+    s = re.sub(r'[\\/:*?"<>|]', '', s)
+    return s.strip()
+
 # JSON helpers
 # ---------------------------------------------------------------------------
 def _fix_control_chars(s: str) -> str:
