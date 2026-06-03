@@ -2039,10 +2039,13 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                 # ── Track list: checkbox column + expander column ──────────
                 for i, t in enumerate(tracks, 1):
                     if isinstance(t, dict):
+                        _tk_key = f"track_{i}"
+                        _tk_failed = _tk_key in st.session_state.suno_failed
+                        _tk_icon = "❌" if _tk_failed else "🎵"
                         chk_col, exp_col = st.columns([0.05, 0.95])
                         chk_col.checkbox("", key=f"chk_{i}", label_visibility="collapsed")
                         with exp_col:
-                            with st.expander(f"🎵 Track {i}: {t.get('title', f'Track {i}')}", expanded=False):
+                            with st.expander(f"{_tk_icon} Track {i}: {t.get('title', f'Track {i}')}", expanded=_tk_failed):
                                 style = t.get("music_style", "")
                                 lyrics = t.get("lyrics", "")
                                 if style:
@@ -2051,7 +2054,7 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                                     with st.expander("📝 Lyrics", expanded=False):
                                         st.write(lyrics)
                                 st.divider()
-                                music_widget(t.get("title", f"Track {i}"), style, lyrics, f"track_{i}")
+                                music_widget(t.get("title", f"Track {i}"), style, lyrics, _tk_key)
                     else:
                         st.markdown(f"{i}. {t}")
 
