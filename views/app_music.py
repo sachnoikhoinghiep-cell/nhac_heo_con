@@ -8,8 +8,8 @@ from auth import (
     save_user_api_keys, load_user_api_keys,
     save_presets, load_presets,
     update_history_suno,
+    save_video_prefs, load_video_prefs,
 )
-from supabase_db import save_user_video_prefs, get_user_video_prefs
 from views._nav import render as nav
 from browser_notify import queue_notification, send_notification_direct
 
@@ -397,13 +397,16 @@ if "api_keys_loaded" not in st.session_state:
     else:
         _saved = load_api_keys()
     _apply_api_keys(_saved)
+    _vp = load_video_prefs()
+    if _vp:
+        st.session_state.grok_prefs = _vp
     st.session_state.api_keys_loaded = True
 
 # Nếu user vừa login (session restore / OAuth) mà keys chưa load từ Firestore
 _cur_user = st.session_state.get("user")
 if _cur_user and not st.session_state.get("user_api_keys_loaded"):
     _apply_api_keys(load_user_api_keys(_cur_user["uid"]))
-    _saved_prefs = get_user_video_prefs(_cur_user["uid"])
+    _saved_prefs = load_video_prefs()
     if _saved_prefs:
         st.session_state.grok_prefs = _saved_prefs
     st.session_state.user_api_keys_loaded = True
@@ -2519,15 +2522,8 @@ with tab_api:
             if st.button("💾 Lưu cài đặt video", key="save_grok_prefs", use_container_width=True):
                 _new_prefs = {"duration": _gp_dur, "aspect": _gp_asp, "resolution": _gp_res}
                 st.session_state.grok_prefs = _new_prefs
-                _usr_gp = st.session_state.get("user")
-                if _usr_gp:
-                    try:
-                        save_user_video_prefs(_usr_gp["uid"], _new_prefs)
-                        st.success("✅ Đã lưu cài đặt video vào tài khoản!")
-                    except Exception as _gpe:
-                        st.warning(f"Đã lưu vào phiên. Lỗi lưu tài khoản: {_gpe}")
-                else:
-                    st.info("Đăng nhập để lưu cài đặt vĩnh viễn. Hiện tại lưu trong phiên.")
+                save_video_prefs(_new_prefs)
+                st.success("✅ Đã lưu cài đặt video (lưu trong trình duyệt 1 năm)!")
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button(f"✅ Activate — {_selap['name']}", key=f"activate_{_selid}",

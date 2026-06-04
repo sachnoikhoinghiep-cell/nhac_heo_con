@@ -92,6 +92,29 @@ def load_api_keys() -> dict:
         pass
     return {}
 
+_VIDEOPREF_COOKIE = "sonicflowai_vp"
+
+def save_video_prefs(prefs: dict):
+    """Lưu Grok video preferences vào cookie."""
+    try:
+        _cookie_mgr().set(
+            _VIDEOPREF_COOKIE, json.dumps(prefs),
+            expires_at=datetime.now() + timedelta(days=365),
+        )
+    except Exception:
+        pass
+
+def load_video_prefs() -> dict:
+    """Đọc Grok video preferences từ cookie."""
+    try:
+        raw = _ctx_cookie(_VIDEOPREF_COOKIE) or _cookie_mgr().get(_VIDEOPREF_COOKIE) or ""
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+    return {}
+
+
 def save_user_api_keys(uid: str, anthropic: str, google: str, suno: str, fal: str = "", xai: str = ""):
     """Lưu API keys vào Supabase (mã hoá Fernet)."""
     try:
