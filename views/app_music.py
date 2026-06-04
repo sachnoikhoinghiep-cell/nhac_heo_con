@@ -8,6 +8,7 @@ from auth import (
     save_user_api_keys, load_user_api_keys,
     save_presets, load_presets,
     update_history_suno,
+    save_user_video_prefs, get_user_video_prefs,
 )
 from views._nav import render as nav
 from browser_notify import queue_notification, send_notification_direct
@@ -371,6 +372,7 @@ for _k, _v in {
     "suno_credits": None,        # cached credit balance from sunoapi.org
     "fal_videos": {},            # scene_key -> video URL
     "grok_videos": {},           # scene_key -> video URL (Grok xAI)
+    "grok_prefs": {},            # saved video preferences {duration, aspect, resolution}
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -401,6 +403,9 @@ if "api_keys_loaded" not in st.session_state:
 _cur_user = st.session_state.get("user")
 if _cur_user and not st.session_state.get("user_api_keys_loaded"):
     _apply_api_keys(load_user_api_keys(_cur_user["uid"]))
+    _saved_prefs = get_user_video_prefs(_cur_user["uid"])
+    if _saved_prefs:
+        st.session_state.grok_prefs = _saved_prefs
     st.session_state.user_api_keys_loaded = True
 
 # ---------------------------------------------------------------------------
@@ -830,10 +835,21 @@ def grok_video_widget(prompt: str, scene_key: str):
     _cd_key = f"_cd_grok_{scene_key}"
     _cd_rem = int(15 - (time.time() - st.session_state.get(_cd_key, 0)))
 
+    _prefs = st.session_state.get("grok_prefs", {})
+    _def_dur = str(_prefs.get("duration", "5"))
+    _def_asp = _prefs.get("aspect", "16:9")
+    _def_res = _prefs.get("resolution", "720p")
+
     p1, p2, p3 = st.columns(3)
-    duration    = int(p1.selectbox("Duration (s)", GROK_DURATIONS, index=2, key=f"grok_dur_{scene_key}"))
-    aspect      = p2.selectbox("Aspect ratio",  GROK_ASPECTS,    index=0, key=f"grok_asp_{scene_key}")
-    resolution  = p3.selectbox("Resolution",    GROK_RESOLUTIONS, index=0, key=f"grok_res_{scene_key}")
+    duration   = int(p1.selectbox("Duration (s)", GROK_DURATIONS,
+                     index=GROK_DURATIONS.index(_def_dur) if _def_dur in GROK_DURATIONS else 2,
+                     key=f"grok_dur_{scene_key}"))
+    aspect     = p2.selectbox("Aspect ratio", GROK_ASPECTS,
+                     index=GROK_ASPECTS.index(_def_asp) if _def_asp in GROK_ASPECTS else 0,
+                     key=f"grok_asp_{scene_key}")
+    resolution = p3.selectbox("Resolution",   GROK_RESOLUTIONS,
+                     index=GROK_RESOLUTIONS.index(_def_res) if _def_res in GROK_RESOLUTIONS else 0,
+                     key=f"grok_res_{scene_key}")
 
     existing = st.session_state.grok_videos.get(scene_key)
     if existing:
@@ -2472,6 +2488,46 @@ with tab_api:
             st.caption("[Lấy xAI API key →](https://console.x.ai/)")
             if st.secrets.get("CF_ACCOUNT_ID") and st.secrets.get("CF_GATEWAY_ID"):
                 st.success("✅ Cloudflare AI Gateway đã cấu hình — request đi qua Gateway.")
+
+            st.divider()
+            st.markdown("**🎛️ Cài đặt mặc định Grok Video**")
+            _gp = st.session_state.get("grok_prefs", {})
+            _gc1, _gc2, _gc3 = st.columns(3)
+            _gp_dur = _gc1.selectbox(
+                "Duration (giây)",
+                GROK_DURATIONS,
+                index=GROK_DURATIONS.index(str(_gp.get("duration", "5")))
+                      if str(_gp.get("duration", "5")) in GROK_DURATIONS else 2,
+                key="grok_pref_dur",
+            )
+            _gp_asp = _gc2.selectbox(
+                "Aspect Ratio",
+                GROK_ASPECTS,
+                index=GROK_ASPECTS.index(_gp.get("aspect", "16:9"))
+                      if _gp.get("aspect", "16:9") in GROK_ASPECTS else 0,
+                key="grok_pref_asp",
+            )
+            _gp_res = _gc3.selectbox(
+                "Chất lượng",
+                GROK_RESOLUTIONS,
+                index=GROK_RESOLUTIONS.index(_gp.get("resolution", "720p"))
+                      if _gp.get("resolution", "720p") in GROK_RESOLUTIONS else 0,
+                key="grok_pref_res",
+            )
+            _cost_preview = round(int(_gp_dur) * 0.08, 2)
+            st.caption(f"💰 Giá ước tính: **${_cost_preview}** mỗi video")
+            if st.button("💾 Lưu cài đặt video", key="save_grok_prefs", use_container_width=True):
+                _new_prefs = {"duration": _gp_dur, "aspect": _gp_asp, "resolution": _gp_res}
+                st.session_state.grok_prefs = _new_prefs
+                _usr_gp = st.session_state.get("user")
+                if _usr_gp:
+                    try:
+                        save_user_video_prefs(_usr_gp["uid"], _new_prefs)
+                        st.success("✅ Đã lưu cài đặt video vào tài khoản!")
+                    except Exception as _gpe:
+                        st.warning(f"Đã lưu vào phiên. Lỗi lưu tài khoản: {_gpe}")
+                else:
+                    st.info("Đăng nhập để lưu cài đặt vĩnh viễn. Hiện tại lưu trong phiên.")
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button(f"✅ Activate — {_selap['name']}", key=f"activate_{_selid}",

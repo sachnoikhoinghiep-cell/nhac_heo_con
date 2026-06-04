@@ -379,6 +379,36 @@ def get_api_keys(uid: str) -> dict:
     return keys
 
 
+def save_user_video_prefs(uid: str, prefs: dict):
+    """Lưu Grok video preferences của user vào user_api_keys table."""
+    db = get_supabase()
+    db.table("user_api_keys").upsert({
+        "user_id":       uid,
+        "provider":      "grok_video_prefs",
+        "encrypted_key": _encrypt(json.dumps(prefs, ensure_ascii=False)),
+        "updated_at":    _now(),
+    }, on_conflict="user_id,provider").execute()
+
+
+def get_user_video_prefs(uid: str) -> dict:
+    """Lấy Grok video preferences. Trả về {} nếu chưa lưu."""
+    db = get_supabase()
+    result = (
+        db.table("user_api_keys")
+        .select("encrypted_key")
+        .eq("user_id", uid)
+        .eq("provider", "grok_video_prefs")
+        .maybe_single()
+        .execute()
+    )
+    if result.data:
+        try:
+            return json.loads(_decrypt(result.data["encrypted_key"]))
+        except Exception:
+            pass
+    return {}
+
+
 # ===========================================================================
 # PROJECTS
 # ===========================================================================
