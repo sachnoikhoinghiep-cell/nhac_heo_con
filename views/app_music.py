@@ -370,6 +370,7 @@ for _k, _v in {
     "current_history_id": None,  # Firestore doc id for Suno URL updates
     "suno_credits": None,        # cached credit balance from sunoapi.org
     "fal_videos": {},            # scene_key -> video URL
+    "grok_videos": {},           # scene_key -> video URL (Grok xAI)
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -382,6 +383,8 @@ def _apply_api_keys(keys: dict):
         st.session_state.suno_api_key = keys["suno"]
     if keys.get("fal"):
         st.session_state.fal_api_key = keys["fal"]
+    if keys.get("xai"):
+        st.session_state.xai_api_key = keys["xai"]
 
 if "api_keys_loaded" not in st.session_state:
     _user = st.session_state.get("user")
@@ -765,6 +768,101 @@ def call_fal_video(api_key: str, model_id: str, payload: dict, status_slot) -> s
             err = s.get("error") or {}
             raise ValueError(err.get("msg") or err.get("message") or "Video generation failed")
     raise TimeoutError("Video generation timed out (6 min)")
+
+
+# ---------------------------------------------------------------------------
+# Grok xAI Video generation (via Cloudflare AI Gateway or direct)
+# ---------------------------------------------------------------------------
+def _grok_base_url() -> str:
+    """Trả về base URL xAI — qua CF Gateway nếu có cấu hình, không thì direct."""
+    cf_account = st.secrets.get("CF_ACCOUNT_ID", "")
+    cf_gateway = st.secrets.get("CF_GATEWAY_ID", "")
+    if cf_account and cf_gateway:
+        return f"https://gateway.ai.cloudflare.com/v1/{cf_account}/{cf_gateway}/grok"
+    return "https://api.x.ai/v1"
+
+GROK_DURATIONS  = [str(i) for i in range(3, 11)]   # 3–10 giây
+GROK_ASPECTS    = ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3"]
+GROK_RESOLUTIONS = ["720p", "480p"]
+
+def call_grok_video(xai_key: str, prompt: str,
+                    duration: int = 5,
+                    aspect_ratio: str = "16:9",
+                    resolution: str = "720p",
+                    status_slot=None) -> str:
+    """Submit Grok video job, poll until done, return video URL."""
+    base = _grok_base_url()
+    headers = {"Authorization": f"Bearer {xai_key}", "Content-Type": "application/json"}
+    payload = {
+        "model":        "grok-imagine-video-1.5-preview",
+        "prompt":       prompt,
+        "duration":     duration,
+        "aspect_ratio": aspect_ratio,
+        "resolution":   resolution,
+    }
+    resp = requests.post(f"{base}/videos/generations", json=payload, headers=headers, timeout=60)
+    resp.raise_for_status()
+    request_id = resp.json()["request_id"]
+
+    poll_url = f"{base}/videos/{request_id}"
+    for attempt in range(90):   # max ~15 min
+        time.sleep(10)
+        s = requests.get(poll_url, headers=headers, timeout=20).json()
+        status = s.get("status", "")
+        if status_slot:
+            status_slot.info(f"🎬 Grok đang render… ({attempt * 10}s) [{status}]")
+        if status == "done":
+            return s["video"]["url"]
+        if status in ("failed", "error"):
+            raise ValueError(s.get("error", {}).get("message") or "Grok video generation failed")
+    raise TimeoutError("Grok video generation timed out (15 min)")
+
+
+def grok_video_widget(prompt: str, scene_key: str):
+    """Per-scene Grok xAI video generation UI."""
+    xai_key = st.session_state.get("xai_api_key", "").strip()
+    if not xai_key:
+        st.caption("🔑 Nhập xAI API Key trong tab **🔑 API Keys** để tạo video Grok.")
+        return
+
+    gkey = f"grok_{scene_key}"
+    _cd_key = f"_cd_grok_{scene_key}"
+    _cd_rem = int(15 - (time.time() - st.session_state.get(_cd_key, 0)))
+
+    p1, p2, p3 = st.columns(3)
+    duration    = int(p1.selectbox("Duration (s)", GROK_DURATIONS, index=2, key=f"grok_dur_{scene_key}"))
+    aspect      = p2.selectbox("Aspect ratio",  GROK_ASPECTS,    index=0, key=f"grok_asp_{scene_key}")
+    resolution  = p3.selectbox("Resolution",    GROK_RESOLUTIONS, index=0, key=f"grok_res_{scene_key}")
+
+    existing = st.session_state.grok_videos.get(scene_key)
+    if existing:
+        st.video(existing)
+        st.download_button(
+            "⬇️ Tải video Grok", existing,
+            file_name=f"{scene_key}_grok.mp4", mime="video/mp4",
+            key=f"grok_dl_{scene_key}",
+        )
+
+    _cost_usd = round(duration * 0.08, 2)
+    btn_label = (f"🔄 Render lại (${_cost_usd})" if existing
+                 else f"🎬 Tạo video Grok (${_cost_usd})")
+
+    if _cd_rem > 0:
+        st.button(f"⏳ Cooldown {_cd_rem}s…", disabled=True, key=f"grok_btn_{scene_key}")
+    else:
+        if st.button(btn_label, key=f"grok_btn_{scene_key}", use_container_width=True):
+            st.session_state[_cd_key] = time.time()
+            status_slot = st.empty()
+            try:
+                video_url = call_grok_video(
+                    xai_key, prompt, duration, aspect, resolution, status_slot
+                )
+                st.session_state.grok_videos[scene_key] = video_url
+                status_slot.empty()
+                st.rerun()
+            except Exception as _e:
+                status_slot.empty()
+                st.error(f"❌ Lỗi Grok video: {_e}")
 
 
 def fal_video_widget(prompt: str, scene_key: str):
@@ -2138,7 +2236,11 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
                         with st.expander(f"🎬 Scene {i}", expanded=(i == 1)):
                             st.markdown(scene)
                             st.divider()
-                            fal_video_widget(scene, f"scene_{i}")
+                            _vtab_fal, _vtab_grok = st.tabs(["🖼️ fal.ai (Seedance)", "🎬 Grok xAI Video"])
+                            with _vtab_fal:
+                                fal_video_widget(scene, f"scene_{i}")
+                            with _vtab_grok:
+                                grok_video_widget(scene, f"scene_{i}")
                 else:
                     st.info("Không có dữ liệu cảnh.")
                 if "Relax" in music_genre or music_genre == "Ambient Relax (Meditation)":
@@ -2287,6 +2389,8 @@ with tab_api:
          "key": "suno_api_key",       "ph": "Nhập Suno API key..."},
         {"id": "fal",       "icon": "🖼️",  "name": "fal.ai",
          "key": "fal_api_key",        "ph": "fal-..."},
+        {"id": "xai",       "icon": "🎬", "name": "xAI (Grok Video)",
+         "key": "xai_api_key",        "ph": "xai-..."},
     ]
 
     _api_left, _api_right = st.columns([1, 2.5], gap="large")
@@ -2350,13 +2454,23 @@ with tab_api:
             st.caption("**V5_5 / V5**: thời lượng đến 8 phút  ·  **V4_5 / V4**: đến 4 phút")
             st.caption("[Xem credit tại sunoapi.org →](https://sunoapi.org/dashboard)")
 
-        else:
+        elif _selid == "fal":
             st.markdown("**Dùng cho:**")
             st.markdown(
                 "- 🖼️ **Tạo ảnh thumbnail** — Nano Banana Pro (16:9, 1K/2K/4K)\n"
                 "- 🎬 **Tạo video MV** — Seedance 2.0 (Text-to-Video / Image-to-Video)\n"
             )
             st.caption("[Lấy fal.ai API key →](https://fal.ai/dashboard)")
+        else:
+            st.markdown("**Dùng cho:**")
+            st.markdown(
+                "- 🎬 **Tạo video MV** — Grok Imagine Video 1.5 Preview\n"
+                "- Text-to-Video, 3–10 giây, 720p, 7 aspect ratio\n"
+                "- Giá: **$0.08/giây** (tự thanh toán xAI)\n"
+            )
+            st.caption("[Lấy xAI API key →](https://console.x.ai/)")
+            if st.secrets.get("CF_ACCOUNT_ID") and st.secrets.get("CF_GATEWAY_ID"):
+                st.success("✅ Cloudflare AI Gateway đã cấu hình — request đi qua Gateway.")
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button(f"✅ Activate — {_selap['name']}", key=f"activate_{_selid}",
@@ -2367,15 +2481,16 @@ with tab_api:
             _au  = st.session_state.get("anthropic_api_key", "")
             _su  = st.session_state.get("suno_api_key", "")
             _fu  = st.session_state.get("fal_api_key", "")
+            _xu  = st.session_state.get("xai_api_key", "")
             _usr = st.session_state.get("user")
             if _usr:
                 try:
-                    save_user_api_keys(_usr["uid"], _au, "", _su, _fu)
+                    save_user_api_keys(_usr["uid"], _au, "", _su, _fu, _xu)
                     st.success(f"✅ **{_selap['name']}** đã kích hoạt và lưu vào tài khoản!")
                 except Exception as _e:
                     st.warning(f"Đã lưu vào phiên. Lỗi lưu tài khoản: {_e}")
             else:
-                save_api_keys(_au, "", _su, _fu)
+                save_api_keys(_au, "", _su, _fu, _xu)
                 st.success(f"✅ **{_selap['name']}** đã kích hoạt!")
 
 # ── Music tab placeholder ──────────────────────────────────────────────────────

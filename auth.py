@@ -66,9 +66,9 @@ def _clear_rt():
 # ---------------------------------------------------------------------------
 _APIKEY_COOKIE = "sonicflowai_ak"
 
-def save_api_keys(anthropic: str, google: str, suno: str, fal: str = ""):
+def save_api_keys(anthropic: str, google: str, suno: str, fal: str = "", xai: str = ""):
     """Lưu API keys vào cookie (fallback cho user chưa login)."""
-    data = json.dumps({"a": anthropic, "g": google, "s": suno, "f": fal})
+    data = json.dumps({"a": anthropic, "g": google, "s": suno, "f": fal, "x": xai})
     try:
         _cookie_mgr().set(
             _APIKEY_COOKIE, data,
@@ -86,15 +86,16 @@ def load_api_keys() -> dict:
             return {
                 "anthropic": d.get("a", ""), "google": d.get("g", ""),
                 "suno": d.get("s", ""), "fal": d.get("f", ""),
+                "xai": d.get("x", ""),
             }
     except Exception:
         pass
     return {}
 
-def save_user_api_keys(uid: str, anthropic: str, google: str, suno: str, fal: str = ""):
+def save_user_api_keys(uid: str, anthropic: str, google: str, suno: str, fal: str = "", xai: str = ""):
     """Lưu API keys vào Supabase (mã hoá Fernet)."""
     try:
-        sdb.save_api_keys(uid, anthropic=anthropic, google=google, suno=suno, fal=fal)
+        sdb.save_api_keys(uid, anthropic=anthropic, google=google, suno=suno, fal=fal, xai=xai)
     except Exception:
         pass
 

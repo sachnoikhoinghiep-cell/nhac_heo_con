@@ -345,12 +345,12 @@ def load_user_with_subscription(uid: str) -> dict:
 # ===========================================================================
 
 def save_api_keys(uid: str, anthropic: str = "", google: str = "",
-                  suno: str = "", fal: str = ""):
+                  suno: str = "", fal: str = "", xai: str = ""):
     """Lưu (upsert) API keys — mã hoá từng key trước khi ghi."""
     db  = get_supabase()
     rows = []
     for provider, value in [("anthropic", anthropic), ("google", google),
-                             ("suno", suno), ("fal", fal)]:
+                             ("suno", suno), ("fal", fal), ("xai", xai)]:
         if value:
             rows.append({
                 "user_id":       uid,
