@@ -8,8 +8,8 @@ from auth import (
     save_user_api_keys, load_user_api_keys,
     save_presets, load_presets,
     update_history_suno,
-    save_user_video_prefs, get_user_video_prefs,
 )
+from supabase_db import save_user_video_prefs, get_user_video_prefs
 from views._nav import render as nav
 from browser_notify import queue_notification, send_notification_direct
 
