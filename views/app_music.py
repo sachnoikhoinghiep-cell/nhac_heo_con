@@ -820,7 +820,8 @@ def call_grok_video(xai_key: str, prompt: str,
 
 def grok_video_widget(prompt: str, scene_key: str):
     """Per-scene Grok xAI video generation UI."""
-    xai_key = st.session_state.get("xai_api_key", "").strip()
+    from llm_router import _secret
+    xai_key = st.session_state.get("xai_api_key", "").strip() or _secret("XAI_API_KEY")
     if not xai_key:
         st.caption("🔑 Nhập xAI API Key trong tab **🔑 API Keys** để tạo video Grok.")
         return
