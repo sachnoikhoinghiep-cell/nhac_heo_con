@@ -2679,26 +2679,39 @@ with tab_api:
                 st.success("✅ Đã lưu cài đặt video (lưu trong trình duyệt 1 năm)!")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button(f"✅ Activate — {_selap['name']}", key=f"activate_{_selid}",
+        if st.button(f"✅ Lưu & Kích hoạt — {_selap['name']}", key=f"activate_{_selid}",
                      type="primary", use_container_width=True):
-            st.session_state[_selap["key"]] = _newkey.strip()
-            if _selid == "suno" and _newmodel:
-                st.session_state["suno_model"] = _newmodel
-            _au  = st.session_state.get("anthropic_api_key", "")
-            _su  = st.session_state.get("suno_api_key", "")
-            _fu  = st.session_state.get("fal_api_key", "")
-            _xu  = st.session_state.get("xai_api_key", "")
-            _oru = st.session_state.get("openrouter_api_key", "")
-            _usr = st.session_state.get("user")
-            if _usr:
-                try:
-                    save_user_api_keys(_usr["uid"], _au, "", _su, _fu, _xu, _oru)
-                    st.success(f"✅ **{_selap['name']}** đã kích hoạt và lưu vào tài khoản!")
-                except Exception as _e:
-                    st.warning(f"Đã lưu vào phiên. Lỗi lưu tài khoản: {_e}")
+            # Ghi key mới vào session state trước khi đọc lại toàn bộ
+            _clean_key = _newkey.strip()
+            if not _clean_key:
+                st.warning("⚠️ Key trống — nhập API key trước khi lưu.")
             else:
-                save_api_keys(_au, "", _su, _fu, _xu, _oru)
-                st.success(f"✅ **{_selap['name']}** đã kích hoạt!")
+                st.session_state[_selap["key"]] = _clean_key
+                if _selid == "suno" and _newmodel:
+                    st.session_state["suno_model"] = _newmodel
+
+                # Gom tất cả keys hiện có từ session state
+                _au  = st.session_state.get("anthropic_api_key", "")
+                _su  = st.session_state.get("suno_api_key", "")
+                _fu  = st.session_state.get("fal_api_key", "")
+                _xu  = st.session_state.get("xai_api_key", "")
+                _oru = st.session_state.get("openrouter_api_key", "")
+                _usr = st.session_state.get("user")
+
+                if _usr:
+                    try:
+                        save_user_api_keys(_usr["uid"], _au, "", _su, _fu, _xu, _oru)
+                        st.success(
+                            f"✅ **{_selap['name']}** đã lưu vào tài khoản Supabase!"
+                        )
+                    except Exception as _e:
+                        st.error(
+                            f"❌ Lỗi lưu Supabase: {_e}\n\n"
+                            "Key vẫn hoạt động trong phiên này, nhưng sẽ mất khi reload."
+                        )
+                else:
+                    save_api_keys(_au, "", _su, _fu, _xu, _oru)
+                    st.success(f"✅ **{_selap['name']}** đã kích hoạt (lưu cookie).")
 
 # ── Music tab placeholder ──────────────────────────────────────────────────────
 with tab_music:

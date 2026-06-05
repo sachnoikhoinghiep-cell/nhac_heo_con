@@ -116,11 +116,8 @@ def load_video_prefs() -> dict:
 
 
 def save_user_api_keys(uid: str, anthropic: str, google: str, suno: str, fal: str = "", xai: str = "", openrouter: str = ""):
-    """Lưu API keys vào Supabase (mã hoá Fernet)."""
-    try:
-        sdb.save_api_keys(uid, anthropic=anthropic, google=google, suno=suno, fal=fal, xai=xai, openrouter=openrouter)
-    except Exception:
-        pass
+    """Lưu API keys vào Supabase (mã hoá Fernet). Raises nếu lỗi."""
+    sdb.save_api_keys(uid, anthropic=anthropic, google=google, suno=suno, fal=fal, xai=xai, openrouter=openrouter)
 
 def load_user_api_keys(uid: str) -> dict:
     """Đọc API keys từ Supabase và giải mã. Trả về dict rỗng nếu chưa lưu."""
