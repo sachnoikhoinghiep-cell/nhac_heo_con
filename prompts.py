@@ -111,6 +111,19 @@ Exception: the "visual_prompt" field must ALWAYS be written in English regardles
         - Pipa (琵琶 / Tỳ Bà): rhythmic accent and color — staccato plucks, occasional melodic fills, bridges lyrical and rhythmic roles.
     - Visual prompt tone (Nano Banana): ink-wash painting style (thủy mặc / 水墨画) OR 3D isometric ancient Chinese scene. Preferred settings: misty bamboo forest (rừng trúc mờ sương), candlelit scholar's study beside a latticed window (thư phòng cổ kính), or a lone swordsman standing beneath a falling peach blossom tree (kiếm khách dưới gốc đào). Palette: ink-grey, jade-green, soft gold, mist-white. No saturated modern colors.
     - BPM: 65-80 (rubato allowed for solo passages), instruments: Guzheng, Dizi, Pipa, Erhu, wind chimes, flowing water ambience, natural room reverb. No electronic elements.
+- IF genre == "Festival Dubstep (Heavy Bass)":
+    - Lyrics: ULTRA-MINIMAL. No storytelling lyrics. Use ONLY short Pre-Drop vocal hype phrases designed to ignite a festival crowd (e.g. "Make some noise!", "Open up the pit!", "Break it down!", "Let's go!", "Put your hands up!", "Are you ready?!"). Max 1-2 lines per section — let the bass carry the energy.
+    - Sound structure:
+        - [Intro: Atmospheric Tension]: Dark sci-fi synth pad, distant crowd murmur, bass hum building. No kick yet. 8 bars of pure dread-tension.
+        - [Build-up: Snare Roll]: Snare roll accelerating every 4 bars → every 2 bars → every bar → 16th-note snare rush. Pitch rises relentlessly. Tension peaks at maximum.
+        - [Pre-Drop: 1-Second Silence]: COMPLETE CUT — total silence for exactly 1 second. One short crowd-hype vocal line fires in the gap. Maximum suspense.
+        - [THE DROP: Growl Bass Explosion]: Growl Bass (gầm gừ) detonates — bass must feel like it physically rips the speaker cone. Layer: metallic Screeches (tiếng rít kim loại), ultra-heavy Kick-Snare pattern (chát chúa), Vocal Chops in rapid stutter. Zero mercy, no pause.
+        - [Break: Brief Lift]: Strip to atmospheric pad + crowd breath — 8 bars only.
+        - [Second Drop: Even Heavier]: Same pattern but double the screech density and add a pitch-shifted growl layer on top.
+        - [Outro: Bass Decay]: Growl Bass fades to a single resonant sub-bass tone, crowd cheer, silence.
+    - Insert ALL markers: [Intro: Atmospheric Tension], [Build-up: Snare Roll], [Pre-Drop: Silence + Vocal], [THE DROP: Growl Bass], [Break], [Second Drop: Maximum Weight], [Outro: Decay].
+    - Grok Video / Visual: [ENVIRONMENT_LOCK] = "Massive EDM festival mainstage at night, giant LED screens displaying glitchy dark sci-fi visuals, heavy smoke, criss-crossing green and red lasers, pyrotechnic fireballs." Camera: during [Build-up] use "Drone flyover crowd". At [THE DROP] MANDATORY: "Extreme screen shake, rapid zoom in and out, aggressive handheld camera style, dynamic lighting flashes in sync with bass hits."
+    - BPM: 140-150, instruments: Growl Bass (gầm gừ / wobble bass), metallic Screeches, ultra-heavy Kick-Snare, Hype Vocal Chops, dark sci-fi synth pads, sub-bass rumble layer.
 - IF genre == "Deep Chill (Việt Mix)":
     - Lyrics: Write in Vietnamese tự sự (confessional) style — draw from nhạc trẻ buồn, dân ca, or bolero reimagined modern. Core themes: chia ly (separation), người yêu đã đi lấy chồng (lover married another), bến sông / thuyền hoa / tiếc nuối thanh xuân, sự cô đơn giữa thành phố. Use smooth rhyme scheme (vần cuối mượt mà), flowing cadence, no forced rhymes. Every verse must feel like a late-night confession, heavy with unexpressed emotion.
     - Sound structure:
@@ -389,6 +402,53 @@ Trả về CHÍNH XÁC định dạng sau (không thêm câu giao tiếp):
 
 QUAN TRỌNG: Bảng phân cảnh phải có đúng {scenes} hàng, thời gian cộng dồn phải khớp với tổng {dur_str}.
 """
+
+
+LOOP_VIDEO_SYSTEM_PROMPT = """# ROLE & OBJECTIVE
+Bạn là một Chuyên gia Kỹ xảo (VFX Expert) và Giám đốc Hình ảnh AI (AI Visual Director) chuyên sản xuất các video âm nhạc lặp lại vô tận (Seamless Looping Video) cho các kênh YouTube Lofi, Deep Chill, và EDM.
+
+Nhiệm vụ của bạn là nhận chủ đề từ người dùng và thiết kế bộ câu lệnh (Prompt) chuẩn xác nhất để nạp vào các mô hình AI sinh ảnh (Midjourney/Kyma) và AI sinh video (Veo 3/Runway).
+
+# CORE RULES FOR SEAMLESS LOOPS (TUÂN THỦ TUYỆT ĐỐI)
+
+## 1. Quy tắc Tạo Ảnh Gốc (The Base Frame)
+- **Nhân vật:** Ít nhất có thể. Nếu có nhân vật, BẮT BUỘC phải ở trạng thái tĩnh: Ngồi suy tư, đứng nhìn quay lưng lại, nằm ngủ, hoặc góc nghiêng không thấy rõ khẩu hình miệng. TUYỆT ĐỐI KHÔNG miêu tả hành động phức tạp (chạy, nhảy, nói chuyện).
+- **Môi trường:** Phong cảnh thiên nhiên (bầu trời, mặt nước tĩnh, phòng ngủ, quán cafe, góc hẻm).
+
+## 2. Quy tắc Sinh Video (The Motion Prompt)
+- Chỉ được phép miêu tả các chuyển động của môi trường (Ambient Movement) siêu nhỏ và tinh tế.
+- **Từ khóa khuyên dùng:** Gentle breeze, subtle water ripples, dust particles floating, soft glowing light, leaves swaying slightly, distant twinkling stars.
+- **Từ khóa CẤM:** Walking, running, talking, strong wind, chaotic hair physics (tóc bay mạnh rất dễ bị lỗi rễ tre), moving camera (không dùng pan, tilt, zoom).
+
+# OUTPUT FORMAT (MẪU XUẤT DỮ LIỆU BẮT BUỘC)
+Bạn phải trả về kết quả bằng Tiếng Việt (riêng phần Prompt ghi Tiếng Anh) theo đúng định dạng Markdown dưới đây:
+
+### ♾️ KỊCH BẢN VIDEO LOOP: [Chủ đề người dùng nhập]
+
+**1. PROMPT TẠO ẢNH GỐC (START/END FRAME)**
+*(Sử dụng prompt này để tạo bức ảnh tĩnh đầu tiên)*
+> **Prompt:** A highly detailed illustration of [Bối cảnh tĩnh]. [Mô tả nhân vật tĩnh - nếu có]. Cinematic lighting, 8k resolution, lofi aesthetic, highly detailed.
+
+**2. PROMPT TẠO VIDEO (VEO 3 / AI VIDEO)**
+*(Sử dụng tính năng Image-to-Video. Nạp ảnh trên vào cả Start Frame và End Frame)*
+> **Motion Prompt:** Static camera. [Các chuyển động môi trường siêu nhỏ, ví dụ: Subtle dust particles floating in the light, gentle water ripples, very soft breeze moving the fabric slightly]. Loopable atmosphere.
+
+**3. ✂️ HƯỚNG DẪN EDIT LOOP TRÊN CAPCUT (Cho người dùng)**
+- **Bước 1:** Xuất video AI về máy và đưa vào CapCut.
+- **Bước 2:** Nhân bản video thành 2 đoạn nối tiếp nhau (Video 1 & Video 2).
+- **Bước 3:** Ở cuối Video 1, hãy **CẮT BỎ 2-4 FRAMES CUỐI CÙNG**. (Điều này giúp triệt tiêu độ lệch sinh ra do AI nội suy ảnh đầu/cuối không chuẩn 100%).
+- **Bước 4:** Chạy thử điểm giao nhau. Tuyệt đối KHÔNG thêm hiệu ứng chuyển cảnh (Transitions). Nếu mượt, xóa Video 2, nhân bản Video 1 đã cắt lên 60 lần để tạo clip 1 tiếng!
+"""
+
+
+def build_loop_video_prompt(topic: str, visual_style: str, extra_notes: str = "") -> str:
+    notes_line = f"\nYêu cầu thêm: {extra_notes.strip()}" if extra_notes.strip() else ""
+    return (
+        f"Chủ đề video loop: {topic}\n"
+        f"Phong cách hình ảnh: {visual_style}"
+        f"{notes_line}\n\n"
+        "Hãy thiết kế bộ prompt hoàn chỉnh theo đúng OUTPUT FORMAT trong system prompt."
+    )
 
 
 def build_topic_suggestion_prompt(keywords: list, genre: str, language: str) -> str:

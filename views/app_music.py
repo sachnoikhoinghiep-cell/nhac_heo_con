@@ -23,6 +23,7 @@ import time
 from datetime import date, datetime, timezone
 from prompts import (
     SYSTEM_PROMPT,
+    LOOP_VIDEO_SYSTEM_PROMPT,
     build_single_prompt,
     build_album_first_batch_prompt,
     build_album_continuation_prompt,
@@ -30,6 +31,7 @@ from prompts import (
     build_keyword_prompt,
     build_topic_suggestion_prompt,
     build_mv_director_prompt,
+    build_loop_video_prompt,
 )
 
 # ---------------------------------------------------------------------------
@@ -373,6 +375,7 @@ for _k, _v in {
     "fal_videos": {},            # scene_key -> video URL
     "grok_videos": {},           # scene_key -> video URL (Grok xAI)
     "grok_prefs": {},            # saved video preferences {duration, aspect, resolution}
+    "loop_video_result": None,   # markdown result from Video Loop generator
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -599,6 +602,14 @@ GENRE_CONFIG = {
         "style_tags": "Chinese Traditional Instrumental, Guzheng Lead, Dizi Flute, Pipa, Erhu, Pentatonic Scale, Ancient Wuxia Melody, Cinematic Chill",
         "visual_vibe": "Ancient Chinese landscape painting, misty mountains and rivers, traditional tea house, bamboo forest, falling peach blossoms, ethereal lo-fi lighting",
         "hashtags": "#chinesemusic #traditionalinstruments #guzheng #dizi #guzhengchill #guzhengmeditation #nhaccotrong",
+    },
+    # ── Festival / Aggro Bass ─────────────────────────────────────────────────
+    "Festival Dubstep (Heavy Bass)": {
+        "bpm": "140-150 BPM",
+        "style_tags": "Heavy Dubstep, Brostep, Riddim, Growl Bass, Filthy Sub Bass, Aggressive Kick Snare, Hype Vocal Chops, Headbanger, Festival EDM",
+        "visual_vibe": "Massive music festival mainstage at night, giant LED screens displaying glitchy dark sci-fi visuals, heavy smoke, criss-crossing green and red lasers, pyrotechnic fireballs shooting upward, headbanging crowd moshing pit",
+        "hashtags": "#heavydubstep #riddim #bassmusic #lostlands #workoutmusic #gamingmix #headbanger #edmdrop",
+        "thumbnail_idea": "DJ silhouette on mainstage with arms wide open, massive pyrotechnic fire bursts behind, criss-crossing neon green lasers. High-contrast palette: Black – Red – Neon Green. Bold white title text with glitch/distortion effect.",
     },
 }
 GENRE_NAMES = list(GENRE_CONFIG.keys())
@@ -2134,6 +2145,8 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
 
     # Genre info banner
     st.info(f"🎼 **{music_genre}** — {gcfg['bpm']} | {gcfg['style_tags']}")
+    if gcfg.get("thumbnail_idea"):
+        st.markdown(f"🖼️ **Gợi ý Thumbnail:** {gcfg['thumbnail_idea']}")
 
     col1, col2 = st.columns([1, 1], gap="large")
 
@@ -2376,7 +2389,7 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
 # ---------------------------------------------------------------------------
 # Main tabs
 # ---------------------------------------------------------------------------
-tab_music, tab_api = st.tabs(["🎵 Tạo nhạc", "🔑 API Keys"])
+tab_music, tab_loop, tab_api = st.tabs(["🎵 Tạo nhạc", "♾️ Video Loop", "🔑 API Keys"])
 
 # ── API Keys tab ──────────────────────────────────────────────────────────────
 with tab_api:
@@ -2550,6 +2563,124 @@ with tab_api:
 with tab_music:
     if not st.session_state.get("music_result"):
         st.caption("Nhấn **🚀 Bắt đầu sản xuất** ở sidebar để tạo nhạc. Kết quả hiển thị bên dưới.")
+
+# ── Video Loop tab ─────────────────────────────────────────────────────────────
+_LOOP_STYLES = [
+    "Lofi Hip-Hop (phòng ngủ anime, đèn vàng, mưa ngoài cửa sổ)",
+    "Deep Chill / Việt Mix (quán cafe khuya, góc hẻm neon, bến sông)",
+    "Synthwave / Retrowave (lưới neon 80s, thành phố cyberpunk, xe đêm)",
+    "Nature Ambient (rừng trúc sương mù, hồ núi tĩnh lặng, bờ biển hoàng hôn)",
+    "Dark EDM / Festival (sân khấu mainstage, laser xanh đỏ, khói sân khấu)",
+    "Fantasy / Anime (lâu đài phù thủy, cánh đồng hoa đêm, thiên hà nổi)",
+    "Tùy chỉnh (nhập phong cách riêng)",
+]
+
+with tab_loop:
+    st.markdown("## ♾️ Tạo Video Loop (Lofi / Chill / EDM)")
+    st.caption(
+        "AI sẽ thiết kế **Prompt tạo ảnh gốc** (Midjourney/Kyma) và "
+        "**Prompt tạo video** (Veo 3/Runway) tối ưu cho video lặp vô tận — "
+        "kèm hướng dẫn edit loop trên CapCut."
+    )
+    st.divider()
+
+    _lv_col1, _lv_col2 = st.columns([1.2, 1], gap="large")
+
+    with _lv_col1:
+        _lv_topic = st.text_input(
+            "🎨 Chủ đề / Bối cảnh video loop:",
+            placeholder="VD: Cô gái ngồi bên cửa sổ mưa, đèn vàng, tách cà phê",
+            key="loop_topic_input",
+        )
+        _lv_style_sel = st.selectbox(
+            "🖼️ Phong cách hình ảnh:",
+            _LOOP_STYLES,
+            key="loop_style_sel",
+        )
+        _lv_style_custom = ""
+        if "Tùy chỉnh" in _lv_style_sel:
+            _lv_style_custom = st.text_input(
+                "Nhập phong cách:",
+                placeholder="VD: Ink-wash painting, misty bamboo forest, ancient lantern light",
+                key="loop_style_custom",
+            )
+        _lv_notes = st.text_area(
+            "📝 Yêu cầu thêm (không bắt buộc):",
+            placeholder="VD: Nhân vật là chú mèo đội mũ, tông màu tím xanh, không có nhân vật người",
+            height=80,
+            key="loop_notes",
+        )
+
+        _lv_api = st.session_state.get("anthropic_api_key", "").strip()
+        _lv_existing = st.session_state.get("loop_video_result")
+        _lv_btn_label = "🔄 Tạo lại Prompt Loop" if _lv_existing else "✨ Tạo Prompt Video Loop"
+
+        if not _lv_api:
+            st.warning("🔑 Cần Anthropic API Key — vào tab **🔑 API Keys** để nhập.")
+        elif st.button(_lv_btn_label, type="primary", use_container_width=True, key="loop_gen_btn"):
+            _lv_topic_val = _lv_topic.strip()
+            if not _lv_topic_val:
+                st.warning("Nhập chủ đề video loop trước khi tạo.")
+            else:
+                _lv_final_style = (
+                    _lv_style_custom.strip() if _lv_style_custom.strip() else _lv_style_sel
+                )
+                with st.spinner("AI Visual Director đang thiết kế Prompt Loop…"):
+                    try:
+                        _lv_raw, _ = generate_text(
+                            system_prompt=LOOP_VIDEO_SYSTEM_PROMPT,
+                            user_prompt=build_loop_video_prompt(
+                                _lv_topic_val, _lv_final_style, _lv_notes
+                            ),
+                            max_tokens=2048,
+                            user_api_key=_lv_api,
+                            claude_model="claude-haiku-4-5-20251001",
+                        )
+                        st.session_state.loop_video_result = _lv_raw.strip()
+                        st.rerun()
+                    except Exception as _lv_e:
+                        st.error(f"❌ Lỗi tạo prompt: {_lv_e}")
+
+    with _lv_col2:
+        st.markdown("**📋 Hướng dẫn nhanh**")
+        st.markdown("""
+1. Nhập chủ đề bối cảnh → chọn phong cách → nhấn **Tạo Prompt**
+2. Copy **Prompt ảnh gốc** → dán vào Midjourney / Kyma / fal.ai
+3. Dùng ảnh đó làm **Start & End Frame** → dán **Motion Prompt** vào Veo 3 / Runway
+4. Làm theo **Hướng dẫn CapCut** để ghép loop hoàn hảo
+        """)
+        st.divider()
+        st.markdown("**⚡ Từ khóa an toàn cho loop:**")
+        st.code(
+            "static camera · dust particles floating\n"
+            "subtle water ripples · soft glowing light\n"
+            "leaves swaying slightly · distant twinkling stars\n"
+            "gentle breeze · loopable atmosphere",
+            language="text",
+        )
+        st.markdown("**🚫 Tránh tuyệt đối:**")
+        st.markdown(
+            "`walking` · `running` · `strong wind` · "
+            "`chaotic hair` · `pan` · `tilt` · `zoom`"
+        )
+
+    # Kết quả
+    _lv_result = st.session_state.get("loop_video_result")
+    if _lv_result:
+        st.divider()
+        st.markdown(_lv_result)
+        st.divider()
+        _lv_c1, _lv_c2 = st.columns(2)
+        _lv_c1.download_button(
+            "⬇️ Tải kịch bản (.txt)",
+            data=_lv_result,
+            file_name="video_loop_prompt.txt",
+            mime="text/plain",
+            key="loop_dl_btn",
+        )
+        if _lv_c2.button("🗑️ Xóa kết quả", key="loop_clear_btn"):
+            st.session_state.loop_video_result = None
+            st.rerun()
 
 # ---------------------------------------------------------------------------
 # Main logic
