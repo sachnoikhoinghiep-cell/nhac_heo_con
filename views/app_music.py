@@ -376,6 +376,7 @@ for _k, _v in {
     "grok_videos": {},           # scene_key -> video URL (Grok xAI)
     "grok_prefs": {},            # saved video preferences {duration, aspect, resolution}
     "loop_video_result": None,   # markdown result from Video Loop generator
+    "or_images": {},             # openrouter image results: key -> bytes
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -390,6 +391,8 @@ def _apply_api_keys(keys: dict):
         st.session_state.fal_api_key = keys["fal"]
     if keys.get("xai"):
         st.session_state.xai_api_key = keys["xai"]
+    if keys.get("openrouter"):
+        st.session_state.openrouter_api_key = keys["openrouter"]
 
 if "api_keys_loaded" not in st.session_state:
     _user = st.session_state.get("user")
@@ -656,6 +659,110 @@ _IMG_RES_OPTS     = ["1K", "2K", "4K"]
 _IMG_FORMAT_OPTS  = ["png", "jpeg", "webp"]
 _IMG_MIME         = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp"}
 _IMG_EXT          = {"png": "png",       "jpeg": "jpg",        "webp": "webp"}
+
+# ---------------------------------------------------------------------------
+# OpenRouter image generation — 6 multimodal models
+# ---------------------------------------------------------------------------
+OR_IMAGE_MODELS = {
+    "Nano Banana / Gemini 2.5 Flash  ·  rẻ nhất  ·  ~$0.0003/1Ktok":  "google/gemini-2.5-flash-image",
+    "Nano Banana 2 / Gemini 3.1 Flash Preview  ·  ~$0.0005/1Ktok":     "google/gemini-3.1-flash-image-preview",
+    "Nano Banana Pro / Gemini 3 Pro Preview  ·  ~$0.002/1Ktok":        "google/gemini-3-pro-image-preview",
+    "GPT-5 Image Mini  ·  ~$0.0025/1Ktok":                              "openai/gpt-5-image-mini",
+    "GPT-5.4 Image 2  ·  ~$0.008/1Ktok":                               "openai/gpt-5.4-image-2",
+    "GPT-5 Image  ·  tốt nhất  ·  ~$0.01/1Ktok":                       "openai/gpt-5-image",
+}
+OR_ASPECT_OPTS  = ["16:9", "1:1", "9:16", "4:3", "3:4", "3:2", "2:3"]
+OR_QUALITY_OPTS = ["Standard", "HD", "Ultra HD"]
+
+
+def generate_image_openrouter(prompt: str, api_key: str, model_id: str,
+                               aspect_ratio: str = "16:9",
+                               quality: str = "HD") -> bytes:
+    """Gọi OpenRouter chat completions với model image, trả về bytes ảnh."""
+    import base64, re as _re
+    headers = {
+        "Authorization":  f"Bearer {api_key}",
+        "Content-Type":   "application/json",
+        "HTTP-Referer":   "https://sonicflowai.click",
+        "X-Title":        "SonicFlowAI",
+    }
+    full_prompt = (
+        f"{prompt}\n\n"
+        f"Output specifications: aspect ratio {aspect_ratio}, {quality} quality image. "
+        "Generate only the image, no extra text."
+    )
+    payload = {
+        "model":    model_id,
+        "messages": [{"role": "user", "content": full_prompt}],
+    }
+    resp = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        json=payload, headers=headers, timeout=120,
+    )
+    resp.raise_for_status()
+    content = resp.json()["choices"][0]["message"]["content"]
+
+    # content có thể là str hoặc list[dict]
+    if isinstance(content, list):
+        for part in content:
+            if part.get("type") == "image_url":
+                url_data = part["image_url"]["url"]
+                if url_data.startswith("data:"):
+                    return base64.b64decode(url_data.split(",", 1)[1])
+                img_r = requests.get(url_data, timeout=60)
+                img_r.raise_for_status()
+                return img_r.content
+    elif isinstance(content, str):
+        m = _re.search(r'data:image/\w+;base64,([A-Za-z0-9+/=]+)', content)
+        if m:
+            return base64.b64decode(m.group(1))
+
+    raise ValueError(f"Không tìm thấy ảnh trong response. Model: {model_id}")
+
+
+def openrouter_image_widget(prompt: str, img_key: str):
+    """Per-image OpenRouter generation UI."""
+    or_key = st.session_state.get("openrouter_api_key", "").strip()
+    if not or_key:
+        st.caption("🔑 Nhập **OpenRouter API Key** trong tab **🔑 API Keys** để tạo ảnh.")
+        return
+
+    ork = f"or_{img_key}"
+    _cd_or = f"_cd_or_{img_key}"
+    _cd_rem = int(10 - (time.time() - st.session_state.get(_cd_or, 0)))
+
+    # Model + thông số
+    model_label = st.selectbox(
+        "Model:", list(OR_IMAGE_MODELS.keys()), key=f"or_model_{img_key}"
+    )
+    model_id = OR_IMAGE_MODELS[model_label]
+    c1, c2 = st.columns(2)
+    aspect  = c1.selectbox("Aspect Ratio", OR_ASPECT_OPTS,  index=0, key=f"or_ar_{img_key}")
+    quality = c2.selectbox("Quality",      OR_QUALITY_OPTS, index=1, key=f"or_q_{img_key}")
+
+    # Hiển thị ảnh đã có
+    existing = st.session_state.or_images.get(ork)
+    if existing:
+        st.image(existing, use_container_width=True)
+        st.download_button(
+            "⬇️ Tải ảnh (OpenRouter)", data=existing,
+            file_name=f"{img_key}_or.png", mime="image/png",
+            key=f"or_dl_{img_key}",
+        )
+
+    btn_label = "🔄 Tạo lại ảnh (OpenRouter)" if existing else "🌐 Tạo ảnh OpenRouter"
+    if _cd_rem > 0:
+        st.button(f"⏳ Cooldown {_cd_rem}s…", disabled=True, key=f"or_btn_{img_key}", use_container_width=True)
+    elif st.button(btn_label, key=f"or_btn_{img_key}", use_container_width=True):
+        st.session_state[_cd_or] = time.time()
+        _short_model = model_label.split("·")[0].strip()
+        with st.spinner(f"{_short_model} đang tạo ảnh {aspect}…"):
+            try:
+                img_bytes = generate_image_openrouter(prompt, or_key, model_id, aspect, quality)
+                st.session_state.or_images[ork] = img_bytes
+                st.rerun()
+            except Exception as _ore:
+                st.error(f"❌ Lỗi OpenRouter: {_ore}")
 
 def image_widget(prompt: str, img_key: str):
     st.code(prompt, language="text")
@@ -2249,12 +2356,19 @@ def render_results(data: dict, num_tracks: int, topic: str, create_mv: bool, mus
         # Visual prompt — tự động tích hợp visual_vibe của genre
         visual_raw = data.get("visual_prompt", "")
         if visual_raw:
-            st.subheader("Nano Banana 2 – Visual Prompt")
+            st.subheader("🖼️ Tạo ảnh Thumbnail / Minh họa")
             visual_adjusted = (
                 f"Studio quality, 3D isometric, {gcfg['visual_vibe']}, "
                 f"centered on {topic}, {visual_raw}, 8k resolution."
             )
-            image_widget(visual_adjusted, "visual_main")
+            st.code(visual_adjusted, language="text")
+            _img_tab_fal, _img_tab_or = st.tabs(
+                ["🖼️ fal.ai (Nano Banana Pro)", "🌐 OpenRouter (AI Image)"]
+            )
+            with _img_tab_fal:
+                image_widget(visual_adjusted, "visual_main")
+            with _img_tab_or:
+                openrouter_image_widget(visual_adjusted, "visual_main")
 
         seo = data.get("seo", {})
 
@@ -2416,14 +2530,16 @@ with tab_api:
     """, unsafe_allow_html=True)
 
     _APIPROV = [
-        {"id": "anthropic", "icon": "🤖", "name": "Anthropic Claude",
-         "key": "anthropic_api_key", "ph": "sk-ant-api03-..."},
-        {"id": "suno",      "icon": "🎵", "name": "Suno API",
-         "key": "suno_api_key",       "ph": "Nhập Suno API key..."},
-        {"id": "fal",       "icon": "🖼️",  "name": "fal.ai",
-         "key": "fal_api_key",        "ph": "fal-..."},
-        {"id": "xai",       "icon": "🎬", "name": "xAI (Grok Video)",
-         "key": "xai_api_key",        "ph": "xai-..."},
+        {"id": "anthropic",  "icon": "🤖", "name": "Anthropic Claude",
+         "key": "anthropic_api_key",   "ph": "sk-ant-api03-..."},
+        {"id": "suno",       "icon": "🎵", "name": "Suno API",
+         "key": "suno_api_key",        "ph": "Nhập Suno API key..."},
+        {"id": "fal",        "icon": "🖼️",  "name": "fal.ai",
+         "key": "fal_api_key",         "ph": "fal-..."},
+        {"id": "xai",        "icon": "🎬", "name": "xAI (Grok Video)",
+         "key": "xai_api_key",         "ph": "xai-..."},
+        {"id": "openrouter", "icon": "🌐", "name": "OpenRouter (Image AI)",
+         "key": "openrouter_api_key",  "ph": "sk-or-v1-..."},
     ]
 
     _api_left, _api_right = st.columns([1, 2.5], gap="large")
@@ -2494,6 +2610,30 @@ with tab_api:
                 "- 🎬 **Tạo video MV** — Seedance 2.0 (Text-to-Video / Image-to-Video)\n"
             )
             st.caption("[Lấy fal.ai API key →](https://fal.ai/dashboard)")
+
+        elif _selid == "openrouter":
+            st.markdown("**Dùng cho:**")
+            st.markdown(
+                "- 🖼️ **Tạo ảnh Thumbnail & Minh họa** — 6 model image AI\n"
+                "- Thay thế / bổ sung cho fal.ai trong tab **🖼️ Hình ảnh & SEO**\n"
+            )
+            st.divider()
+            st.markdown("**6 Model Image AI có sẵn:**")
+            _or_table = [
+                ("google/gemini-2.5-flash-image",        "Nano Banana / Flash",      "$0.0003/1Ktok", "⚡ Rẻ nhất"),
+                ("google/gemini-3.1-flash-image-preview","Nano Banana 2 / Flash Prev","$0.0005/1Ktok", ""),
+                ("google/gemini-3-pro-image-preview",    "Nano Banana Pro",           "$0.002/1Ktok",  ""),
+                ("openai/gpt-5-image-mini",              "GPT-5 Image Mini",          "$0.0025/1Ktok", ""),
+                ("openai/gpt-5.4-image-2",               "GPT-5.4 Image 2",           "$0.008/1Ktok",  ""),
+                ("openai/gpt-5-image",                   "GPT-5 Image",               "$0.01/1Ktok",   "🏆 Tốt nhất"),
+            ]
+            for _mid, _mname, _mprice, _badge in _or_table:
+                _badge_str = f" `{_badge}`" if _badge else ""
+                st.markdown(f"- **{_mname}**{_badge_str} — `{_mprice}`  \n  `{_mid}`")
+            st.caption("[Lấy OpenRouter API key →](https://openrouter.ai/settings/keys)")
+            st.markdown("**Aspect ratio hỗ trợ:** 16:9 · 1:1 · 9:16 · 4:3 · 3:4 · 3:2 · 2:3")
+            st.markdown("**Quality:** Standard · HD · Ultra HD")
+
         else:
             st.markdown("**Dùng cho:**")
             st.markdown(
@@ -2548,15 +2688,16 @@ with tab_api:
             _su  = st.session_state.get("suno_api_key", "")
             _fu  = st.session_state.get("fal_api_key", "")
             _xu  = st.session_state.get("xai_api_key", "")
+            _oru = st.session_state.get("openrouter_api_key", "")
             _usr = st.session_state.get("user")
             if _usr:
                 try:
-                    save_user_api_keys(_usr["uid"], _au, "", _su, _fu, _xu)
+                    save_user_api_keys(_usr["uid"], _au, "", _su, _fu, _xu, _oru)
                     st.success(f"✅ **{_selap['name']}** đã kích hoạt và lưu vào tài khoản!")
                 except Exception as _e:
                     st.warning(f"Đã lưu vào phiên. Lỗi lưu tài khoản: {_e}")
             else:
-                save_api_keys(_au, "", _su, _fu, _xu)
+                save_api_keys(_au, "", _su, _fu, _xu, _oru)
                 st.success(f"✅ **{_selap['name']}** đã kích hoạt!")
 
 # ── Music tab placeholder ──────────────────────────────────────────────────────
