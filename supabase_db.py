@@ -346,23 +346,34 @@ def load_user_with_subscription(uid: str) -> dict:
 
 def save_api_keys(uid: str, anthropic: str = "", google: str = "",
                   suno: str = "", fal: str = "", xai: str = "", openrouter: str = ""):
-    """Lưu (upsert) API keys — mã hoá từng key trước khi ghi."""
-    db  = get_supabase()
-    rows = []
-    for provider, value in [("anthropic", anthropic), ("google", google),
-                             ("suno", suno), ("fal", fal), ("xai", xai),
-                             ("openrouter", openrouter)]:
-        if value:
-            rows.append({
-                "user_id":       uid,
-                "provider":      provider,
-                "encrypted_key": _encrypt(value),
-                "updated_at":    _now(),
-            })
-    if rows:
-        db.table("user_api_keys").upsert(
-            rows, on_conflict="user_id,provider"
-        ).execute()
+    """Upsert API keys từng provider riêng để tránh 1 lỗi enum phá toàn bộ batch."""
+    db = get_supabase()
+    pairs = [
+        ("anthropic", anthropic), ("google", google),
+        ("suno", suno), ("fal", fal),
+        ("xai", xai), ("openrouter", openrouter),
+    ]
+    failed = []
+    for provider, value in pairs:
+        if not value:
+            continue
+        row = {
+            "user_id":       uid,
+            "provider":      provider,
+            "encrypted_key": _encrypt(value),
+            "updated_at":    _now(),
+        }
+        try:
+            db.table("user_api_keys").upsert(
+                [row], on_conflict="user_id,provider"
+            ).execute()
+        except Exception as e:
+            failed.append((provider, str(e)))
+
+    if failed:
+        # Raise lỗi nhưng các providers khác đã được lưu thành công
+        msgs = "; ".join(f"{p}: {e[:80]}" for p, e in failed)
+        raise ValueError(msgs)
 
 
 def get_api_keys(uid: str) -> dict:

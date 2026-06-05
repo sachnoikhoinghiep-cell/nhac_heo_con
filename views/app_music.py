@@ -2705,10 +2705,23 @@ with tab_api:
                             f"✅ **{_selap['name']}** đã lưu vào tài khoản Supabase!"
                         )
                     except Exception as _e:
-                        st.error(
-                            f"❌ Lỗi lưu Supabase: {_e}\n\n"
-                            "Key vẫn hoạt động trong phiên này, nhưng sẽ mất khi reload."
-                        )
+                        _emsg = str(_e)
+                        if "invalid input value for enum" in _emsg or "22P02" in _emsg:
+                            st.warning(
+                                "⚠️ Một số key lưu thành công, nhưng **xai** / **openrouter** "
+                                "chưa có trong enum Supabase.\n\n"
+                                "**Fix:** Vào [Supabase SQL Editor](https://supabase.com/dashboard/project/"
+                                "rurgamuszbhgyskohrzk/sql) và chạy:\n"
+                                "```sql\n"
+                                "ALTER TYPE api_provider ADD VALUE IF NOT EXISTS 'xai';\n"
+                                "ALTER TYPE api_provider ADD VALUE IF NOT EXISTS 'openrouter';\n"
+                                "```"
+                            )
+                        else:
+                            st.error(
+                                f"❌ Lỗi lưu Supabase: {_emsg}\n\n"
+                                "Key vẫn hoạt động trong phiên này, nhưng sẽ mất khi reload."
+                            )
                 else:
                     save_api_keys(_au, "", _su, _fu, _xu, _oru)
                     st.success(f"✅ **{_selap['name']}** đã kích hoạt (lưu cookie).")
